@@ -86,8 +86,9 @@ place.
 
 ## Navigation & performance
 
-Opening an account lands on a **bottom-tab shell**: **Home** (balance + this month's income and bills
-to check off / edit, plus add-one-off-expense and add-income actions), **Annual** (the full yearly
+Opening an account lands on a **bottom-tab shell**: **Home** (balance + this month's lines to check
+off / edit, grouped into **income**, **recurring**, and **one-off** sections each carrying its own
+month total, plus add-one-off-expense and add-income actions), **Annual** (the full yearly
 grid, with income and expenses totalled in separate sections and reconciled by a net row),
 **Reports** (placeholder), and **Settings**.
 
@@ -132,6 +133,20 @@ python3 scripts/import_regions.py /path/to/PalmBayHouse.xlsx /path/to/your/vault
 
 It writes `<vault>/Regions/<title> - <year>.md` in the schema above and never overwrites existing
 files. Requires `openpyxl` (`pip3 install --user openpyxl`).
+
+## Importing a bank statement
+
+Turns a statement (`Date | Description | Category | Valor`) into **ledger notes** — one per month and
+category, matching what the app writes:
+
+```
+python3 scripts/import_statement.py statement.xlsx /path/to/vault Regions [--dry-run]
+```
+
+The statement's `Category` becomes the group (the note's title and file name); `CATEGORY_SLUG` in the
+script maps it to the frontmatter `category`. Rows already present are skipped, so re-running merges
+rather than duplicating. Dates are tolerated as date cells or `m/d/yyyy` text, and negative amounts
+are stored positive.
 
 ## Design
 

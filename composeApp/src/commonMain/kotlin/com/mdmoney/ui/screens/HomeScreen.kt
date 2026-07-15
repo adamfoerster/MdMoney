@@ -3,7 +3,6 @@ package com.mdmoney.ui.screens
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -31,6 +30,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -63,17 +63,16 @@ fun HomeScreen(model: AppModel, state: UiState) {
     var editBalance by remember { mutableStateOf(false) }
 
     val month = state.homeMonth
-    // This month's lines: income and recurring items always, plus one-offs that land in the month.
-    // Income sorts first — money in, then money out.
-    val bills = state.expenses
-        .filter { it.year == state.year }
-        .filter {
-            it.isIncome ||
-                it.type == ExpenseType.RECURRING_FIXED ||
-                it.type == ExpenseType.RECURRING_VARIABLE ||
-                it.amount(month) != null
-        }
-        .sortedWith(compareBy({ !it.isIncome }, { it.title.lowercase() }))
+    val rows = state.expenses.filter { it.year == state.year }.sortedBy { it.title.lowercase() }
+    // Three kinds of line, kept apart because they are read differently: income is money in;
+    // recurring bills are expected every month and show even before a value exists; one-offs are
+    // already-spent purchases, so they only appear in the month they actually landed in.
+    val incomes = rows.filter { it.isIncome }
+    val recurring = rows.filter {
+        it.type == ExpenseType.RECURRING_FIXED || it.type == ExpenseType.RECURRING_VARIABLE
+    }
+    val oneOffs = rows.filter { it.type == ExpenseType.EVENTUAL && it.amount(month) != null }
+    val empty = incomes.isEmpty() && recurring.isEmpty() && oneOffs.isEmpty()
 
     Surface(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
@@ -107,9 +106,8 @@ fun HomeScreen(model: AppModel, state: UiState) {
 
             Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp)) {
                 Spacer(Modifier.height(8.dp))
-                Eyebrow(s.thisMonth)
-                Spacer(Modifier.height(8.dp))
-                if (bills.isEmpty()) {
+                if (empty) {
+                    Eyebrow(s.thisMonth)
                     Text(
                         s.nothingThisMonth,
                         style = MaterialTheme.typography.bodyLarge,
@@ -117,8 +115,9 @@ fun HomeScreen(model: AppModel, state: UiState) {
                         modifier = Modifier.padding(vertical = 24.dp),
                     )
                 } else {
-                    HairlineDivider(strong = true)
-                    bills.forEach { BillRow(model, it, month) }
+                    Section(s.incomeSection, incomes, month, reino.verdigris, model)
+                    Section(s.recurringSection, recurring, month, reino.ink, model)
+                    Section(s.oneOffSection, oneOffs, month, reino.ink, model)
                 }
                 Spacer(Modifier.height(24.dp))
                 ReinoButton(s.addOneOff, onClick = { model.openAddOneOff() }, trailingArrow = true)
@@ -143,6 +142,38 @@ fun HomeScreen(model: AppModel, state: UiState) {
     }
 }
 
+/**
+ * One labelled block of the month's lines, with the block's own total for the month. Renders nothing
+ * when it has no lines, so an account without income (or without any one-off yet) shows no empty
+ * heading.
+ */
+@Composable
+private fun Section(
+    label: String,
+    rows: List<Expense>,
+    month: Month,
+    accent: Color,
+    model: AppModel,
+) {
+    if (rows.isEmpty()) return
+    val reino = LocalReinoColors.current
+    val sep = LocalDecimalSeparator.current
+    val subtotal = rows.sumOf { it.amount(month) ?: 0.0 }
+
+    Spacer(Modifier.height(14.dp))
+    Row(Modifier.fillMaxWidth().padding(bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+        Eyebrow(label)
+        Spacer(Modifier.weight(1f))
+        Text(
+            formatMoney(subtotal, sep),
+            style = TextStyle(fontFamily = LocalReinoType.current.mono, fontSize = 12.sp, letterSpacing = 0.02.em),
+            color = accent,
+        )
+    }
+    HairlineDivider(strong = true)
+    rows.forEach { BillRow(model, it, month) }
+}
+
 @Composable
 private fun MonthStepper(month: Month, label: String, year: Int, onSelect: (Month) -> Unit) {
     val reino = LocalReinoColors.current
@@ -164,7 +195,6 @@ private fun MonthStepper(month: Month, label: String, year: Int, onSelect: (Mont
 @Composable
 private fun BillRow(model: AppModel, expense: Expense, month: Month) {
     val reino = LocalReinoColors.current
-    val s = LocalStrings.current
     val sep = LocalDecimalSeparator.current
     val paid = expense.isPaid(month)
     val numberStyle = TextStyle(fontFamily = LocalReinoType.current.mono, fontSize = 14.sp, letterSpacing = 0.02.em)
@@ -192,13 +222,8 @@ private fun BillRow(model: AppModel, expense: Expense, month: Month) {
                     .padding(start = 4.dp),
             ) {
                 Text(expense.title, style = MaterialTheme.typography.bodyLarge, color = reino.ink, maxLines = 1)
-                // Income is called out by name on the subtitle line; expenses just show their category.
-                val subtitle = if (expense.isIncome) {
-                    listOfNotNull(s.typeName(ExpenseType.INCOME), expense.category).joinToString(" · ")
-                } else {
-                    expense.category
-                }
-                subtitle?.takeIf { it.isNotBlank() }?.let {
+                // The section heading already names the kind, so the subtitle is just the category.
+                expense.category?.takeIf { it.isNotBlank() }?.let {
                     Text(
                         it,
                         style = MaterialTheme.typography.labelSmall,

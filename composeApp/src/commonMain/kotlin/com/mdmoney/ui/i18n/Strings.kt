@@ -68,6 +68,8 @@ interface Strings {
     val separatorComma: String
     val incomeSection: String
     val expenseSection: String
+    val recurringSection: String
+    val oneOffSection: String
     val net: String
     val addIncome: String
     val received: String

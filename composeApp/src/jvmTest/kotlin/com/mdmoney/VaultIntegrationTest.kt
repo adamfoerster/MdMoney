@@ -26,12 +26,13 @@ class VaultIntegrationTest {
 
     private fun makeVaultWithNubank(): File {
         val nubankSrc = File(projectRoot(), "nubank")
-        check(nubankSrc.isDirectory) { "nubank folder not found at ${nubankSrc.absolutePath}" }
+        // An empty folder passes isDirectory but copies nothing, turning a missing fixture into a
+        // baffling "expected 19 but was 0" downstream — so demand the notes themselves.
+        val notes = nubankSrc.listFiles { f -> f.name.endsWith(".md") }.orEmpty()
+        check(notes.isNotEmpty()) { "no .md fixture notes found in ${nubankSrc.absolutePath}" }
         val vault = Files.createTempDirectory("mdmoney-vault").toFile()
         val account = File(vault, "Nubank").apply { mkdirs() }
-        nubankSrc.listFiles { f -> f.name.endsWith(".md") }!!.forEach { src ->
-            src.copyTo(File(account, src.name), overwrite = true)
-        }
+        notes.forEach { src -> src.copyTo(File(account, src.name), overwrite = true) }
         return vault
     }
 
@@ -119,12 +120,11 @@ class VaultIntegrationTest {
     fun cache_keys_on_folder_name_not_conta_frontmatter() = runBlocking<Unit> {
         // Folder is lowercase `nubank` while every note declares `conta: Nubank`. The cache must key
         // on the folder (what the app lists and looks up), or the account paints empty.
-        val nubankSrc = File(projectRoot(), "nubank")
+        val notes = File(projectRoot(), "nubank").listFiles { f -> f.name.endsWith(".md") }.orEmpty()
+        check(notes.isNotEmpty()) { "no .md fixture notes found in ${projectRoot()}/nubank" }
         val vault = Files.createTempDirectory("mdmoney-case").toFile()
         val account = File(vault, "nubank").apply { mkdirs() }
-        nubankSrc.listFiles { f -> f.name.endsWith(".md") }!!.forEach { src ->
-            src.copyTo(File(account, src.name), overwrite = true)
-        }
+        notes.forEach { src -> src.copyTo(File(account, src.name), overwrite = true) }
 
         val storage = JvmVaultStorage(JvmPrefs(), vault)
         val repo = VaultRepository(storage, CacheDb(":memory:"))
