@@ -9,6 +9,38 @@ plugins {
     alias(libs.plugins.composeCompiler)
 }
 
+/** SemVer from gradle.properties — see the note there before changing how this is sourced. */
+val appVersion: String = providers.gradleProperty("mdmoney.version").get()
+
+/** Android needs a monotonic integer: 0.1.0 -> 100, 1.2.3 -> 10203, so patch/minor stay ordered. */
+val appVersionCode: Int = Regex("""^(\d+)\.(\d+)\.(\d+)$""").matchEntire(appVersion)
+    ?.destructured
+    ?.let { (major, minor, patch) -> major.toInt() * 10_000 + minor.toInt() * 100 + patch.toInt() }
+    ?: error("mdmoney.version must be MAJOR.MINOR.PATCH, was '$appVersion'")
+
+// Hands the version to common code, so the app can show what it is without a per-platform hook.
+val generateAppVersion by tasks.registering {
+    val outputDir = layout.buildDirectory.dir("generated/appVersion")
+    inputs.property("version", appVersion)
+    outputs.dir(outputDir)
+    doLast {
+        outputDir.get().file("com/mdmoney/AppVersion.kt").asFile.apply {
+            parentFile.mkdirs()
+            writeText(
+                """
+                package com.mdmoney
+
+                /** Generated from `mdmoney.version` in gradle.properties — do not edit by hand. */
+                object AppVersion {
+                    const val VERSION: String = "$appVersion"
+                }
+
+                """.trimIndent(),
+            )
+        }
+    }
+}
+
 kotlin {
     androidTarget {
         @OptIn(ExperimentalKotlinGradlePluginApi::class)
@@ -36,6 +68,7 @@ kotlin {
 
     sourceSets {
         val commonMain by getting {
+            kotlin.srcDir(generateAppVersion)
             dependencies {
                 implementation(compose.runtime)
                 implementation(compose.foundation)
@@ -77,8 +110,8 @@ android {
         applicationId = "com.mdmoney"
         minSdk = libs.versions.android.minSdk.get().toInt()
         targetSdk = libs.versions.android.targetSdk.get().toInt()
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = appVersionCode
+        versionName = appVersion
     }
 
     compileOptions {
@@ -115,7 +148,7 @@ compose.desktop {
         nativeDistributions {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
             packageName = "MdMoney"
-            packageVersion = "1.0.0"
+            packageVersion = appVersion
         }
     }
 }

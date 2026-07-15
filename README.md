@@ -123,6 +123,17 @@ The storage layer is the only platform-specific code, behind the `VaultStorage` 
 - **iOS:** open `iosApp/iosApp.xcodeproj` in Xcode and run (the build embeds the Kotlin framework).
 - **Tests:** `./gradlew :composeApp:jvmTest`
 
+## Versioning & release notes
+
+The app follows [SemVer](https://semver.org/), starting at **0.1.0**. `mdmoney.version` in
+`gradle.properties` is the single source of truth: Android's `versionName`/`versionCode`, the desktop
+package, and the `AppVersion` shown at the bottom of Settings all derive from it. Release notes live
+in [CHANGELOG.md](CHANGELOG.md), whose newest entry must match that version — `VersionTest` fails the
+build if the two (or the iOS `MARKETING_VERSION`) drift apart. `CLAUDE.md` has the rules for bumping.
+
+Because the vault is your own Markdown, a change to the on-disk format counts as **breaking**: a note
+this app rewrites must stay readable by the Obsidian vault it came from.
+
 ## Importing the Regions spreadsheet
 
 One-time conversion of `PalmBayHouse.xlsx` (sheets per year) into Markdown notes:

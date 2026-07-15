@@ -25,6 +25,7 @@ import com.mdmoney.ui.components.HairlineDivider
 import com.mdmoney.ui.components.ReinoButton
 import com.mdmoney.ui.components.ReinoButtonVariant
 import com.mdmoney.ui.i18n.Language
+import com.mdmoney.AppVersion
 import com.mdmoney.ui.theme.LocalReinoColors
 
 @Composable
@@ -75,6 +76,16 @@ fun SettingsScreen(model: AppModel, state: UiState) {
                 modifier = Modifier.padding(top = 8.dp, bottom = 16.dp),
             )
             ReinoButton(s.changeVault, onClick = { model.pickVault() }, variant = ReinoButtonVariant.Secondary)
+
+            Spacer(Modifier.height(24.dp))
+            HairlineDivider()
+            Spacer(Modifier.height(16.dp))
+            Text(
+                "${s.appName} ${AppVersion.VERSION}",
+                style = MaterialTheme.typography.labelSmall,
+                color = reino.inkFaint,
+                modifier = Modifier.padding(bottom = 24.dp),
+            )
         }
     }
 }
