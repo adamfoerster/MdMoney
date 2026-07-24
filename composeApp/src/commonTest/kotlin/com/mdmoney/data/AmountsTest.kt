@@ -28,6 +28,18 @@ class AmountsTest {
     }
 
     @Test
+    fun a_currency_symbol_is_prefixed_after_the_sign_only_when_given() {
+        // A non-breaking space (\u00A0) sits between symbol and figure, so a column can't wrap them apart.
+        assertEquals("R$\u00A01234,50", formatMoney(1234.5, ',', "R$"))
+        assertEquals("\u20AC\u00A0390.00", formatMoney(390.0, '.', "\u20AC"))
+        // The sign leads; the symbol sits between it and the figure.
+        assertEquals("-R$\u00A015,00", formatMoney(-15.0, ',', "R$"))
+        // No symbol -> exactly the old output, so unset accounts are untouched.
+        assertEquals("1234,50", formatMoney(1234.5, ',', ""))
+        assertEquals("1234,50", formatMoney(1234.5, ','))
+    }
+
+    @Test
     fun frontmatter_format_is_unaffected_by_display_separator() {
         // formatAmount is storage-only: always a dot, trailing zeros trimmed.
         assertEquals("390", formatAmount(390.0))

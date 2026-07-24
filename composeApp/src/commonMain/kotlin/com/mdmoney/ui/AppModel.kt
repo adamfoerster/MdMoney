@@ -6,6 +6,8 @@ import com.mdmoney.data.CacheDb
 import com.mdmoney.data.DecimalSeparator
 import com.mdmoney.data.VaultRepository
 import com.mdmoney.data.VaultStorage
+import com.mdmoney.domain.Category
+import com.mdmoney.domain.Currency
 import com.mdmoney.domain.Expense
 import com.mdmoney.domain.ExpenseType
 import com.mdmoney.domain.Ledger
@@ -55,7 +57,12 @@ data class OneOffState(
     val date: String,
     val group: String = "",
     val knownGroups: List<String> = emptyList(),
-    val knownCategories: List<String> = emptyList(),
+    val knownCategories: List<Category> = emptyList(),
+    /**
+     * True when the sheet was opened from a group's ledger (rather than the month's quick-add), so
+     * saving returns to that ledger with the new purchase in it rather than dropping back to the list.
+     */
+    val reopenLedger: Boolean = false,
 )
 
 data class UiState(
@@ -69,6 +76,8 @@ data class UiState(
     val accounts: List<String> = emptyList(),
     val selectedAccount: String? = null,
     val year: Int,
+    /** The open account's display title (from its root note); folder name when it has none. */
+    val accountTitle: String? = null,
     val availableYears: List<Int> = emptyList(),
     val expenses: List<Expense> = emptyList(),
     val homeMonth: Month,
@@ -78,6 +87,12 @@ data class UiState(
     val editor: EditorState? = null,
     val oneOff: OneOffState? = null,
     val ledger: Ledger? = null,
+    /** The vault's category notes, which put a title on every `[[casa|Casa]]` the notes carry. */
+    val categories: List<Category> = emptyList(),
+    /** The open account's currency; drives the symbol shown on every figure. [Currency.NONE] shows none. */
+    val currency: Currency = Currency.NONE,
+    /** The category being read on the Reports tab; null is the list of all of them. */
+    val openCategory: String? = null,
 )
 
 /**
@@ -138,8 +153,15 @@ class AppModel(
     fun selectTab(tab: HomeTab) = _state.update { it.copy(tab = tab) }
 
     fun switchAccount() = _state.update {
-        it.copy(screen = Screen.Accounts, selectedAccount = null, editor = null)
+        it.copy(screen = Screen.Accounts, selectedAccount = null, editor = null, openCategory = null)
     }
+
+    // --- Reports ---
+
+    /** Opens one category's year: everything filed under it, and what it cost month by month. */
+    fun openCategory(slug: String) = _state.update { it.copy(openCategory = slug) }
+
+    fun closeCategory() = _state.update { it.copy(openCategory = null) }
 
     fun back() = _state.update {
         val target = when (it.screen) {
@@ -171,9 +193,11 @@ class AppModel(
         _state.update { it.copy(accounts = accounts, loading = false) }
     }
 
-    fun createAccount(name: String) = scope.launch {
+    fun createAccount(name: String, currency: Currency = Currency.NONE) = scope.launch {
         if (name.isBlank()) return@launch
         runCatching { repo.createAccount(name) }
+        // Persist the chosen currency before opening, so the first paint already shows its symbol.
+        if (currency.hasSymbol) runCatching { repo.setCurrency(name.trim(), currency) }
         refreshAccounts().join()
         openAccount(name.trim())
     }
@@ -184,7 +208,15 @@ class AppModel(
     fun openAccount(account: String) = scope.launch {
         meta = runCatching { repo.accountMeta(account) }.getOrNull()
         _state.update {
-            it.copy(selectedAccount = account, screen = Screen.AccountShell, tab = HomeTab.HOME, loading = true)
+            it.copy(
+                selectedAccount = account,
+                screen = Screen.AccountShell,
+                tab = HomeTab.HOME,
+                loading = true,
+                openCategory = null,
+                currency = meta?.currency ?: Currency.NONE,
+                accountTitle = meta?.title ?: account,
+            )
         }
         refreshFromCache(account)
         runCatching { repo.syncAccount(account, thisYear) }
@@ -205,6 +237,7 @@ class AppModel(
         _state.update { st ->
             st.copy(
                 expenses = all,
+                categories = repo.cachedCategories(),
                 availableYears = years,
                 year = if (st.year in years) st.year else (years.firstOrNull() ?: thisYear),
             )
@@ -228,6 +261,19 @@ class AppModel(
         recomputeBalance(account)
     }
 
+    /**
+     * Edits the open account's display title and currency together. A blank title is ignored — the
+     * account keeps the one it had — while the currency (including [Currency.NONE]) always applies.
+     */
+    fun editAccount(title: String, currency: Currency) = scope.launch {
+        val account = _state.value.selectedAccount ?: return@launch
+        val cleanTitle = title.trim().ifBlank { meta?.title ?: account }
+        meta = runCatching { repo.updateAccount(account, cleanTitle, currency) }.getOrNull() ?: meta
+        _state.update {
+            it.copy(currency = meta?.currency ?: currency, accountTitle = meta?.title ?: cleanTitle)
+        }
+    }
+
     // --- Editing ---
 
     fun openAdd() = _state.update { st ->
@@ -239,15 +285,20 @@ class AppModel(
      * Record a one-off purchase in the month currently in view. It becomes a row in that month's
      * ledger note rather than a file of its own — a month of coffees is one note, not thirty.
      */
-    fun openAddOneOff(group: String = "") = _state.update { st ->
+    fun openAddOneOff(group: String = "", month: Month? = null, reopenLedger: Boolean = false) = _state.update { st ->
         if (st.selectedAccount == null) return@update st
+        // A modal sheet at a time: opening this from a ledger must dismiss the ledger, or the two
+        // stack and the ledger — composed last — hides the one-off sheet entirely (App.kt).
+        val m = month ?: st.homeMonth
         st.copy(
+            ledger = null,
             oneOff = OneOffState(
-                month = st.homeMonth,
-                date = defaultDate(st.year, st.homeMonth),
+                month = m,
+                date = defaultDate(st.year, m),
                 group = group,
                 knownGroups = st.expenses.filter { it.ledger }.map { it.title }.distinct().sorted(),
-                knownCategories = st.expenses.mapNotNull { it.category }.distinct().sorted(),
+                knownCategories = st.categories,
+                reopenLedger = reopenLedger,
             ),
         )
     }
@@ -264,14 +315,18 @@ class AppModel(
 
     fun saveOneOff(group: String, category: String?, date: String, note: String, amount: Double?) = scope.launch {
         val account = _state.value.selectedAccount ?: return@launch
-        val month = _state.value.oneOff?.month ?: _state.value.homeMonth
+        val oneOff = _state.value.oneOff
+        val month = oneOff?.month ?: _state.value.homeMonth
+        val reopenLedger = oneOff?.reopenLedger == true
         val year = _state.value.year
         _state.update { it.copy(oneOff = null) }
         if (group.isBlank() || amount == null) return@launch
-        runCatching {
+        val saved = runCatching {
             repo.addOneOff(account, year, month, group, category?.ifBlank { null }, LedgerEntry(date, note.trim(), amount))
-        }
+        }.getOrNull()
         refreshFromCache(account)
+        // Came from the group's ledger: return to it, now carrying the purchase just recorded.
+        if (reopenLedger && saved != null) _state.update { it.copy(ledger = saved) }
     }
 
     // --- ledger detail ---
@@ -287,6 +342,23 @@ class AppModel(
     fun removeLedgerEntry(entry: LedgerEntry) = scope.launch {
         val current = _state.value.ledger ?: return@launch
         val updated = current.copy(entries = current.entries - entry)
+        runCatching { repo.saveLedger(updated) }
+        _state.update { it.copy(ledger = updated) }
+        _state.value.selectedAccount?.let { refreshFromCache(it) }
+    }
+
+    /**
+     * Replaces one purchase in the open ledger with an edited version, keeping its position. Matched
+     * by the first equal entry, so two byte-identical rows edit the earlier one — the same rule
+     * [removeLedgerEntry] follows. A blank amount leaves the ledger untouched.
+     */
+    fun updateLedgerEntry(original: LedgerEntry, edited: LedgerEntry) = scope.launch {
+        val current = _state.value.ledger ?: return@launch
+        val index = current.entries.indexOf(original)
+        if (index < 0) return@launch
+        val updated = current.copy(
+            entries = current.entries.toMutableList().apply { this[index] = edited },
+        )
         runCatching { repo.saveLedger(updated) }
         _state.update { it.copy(ledger = updated) }
         _state.value.selectedAccount?.let { refreshFromCache(it) }

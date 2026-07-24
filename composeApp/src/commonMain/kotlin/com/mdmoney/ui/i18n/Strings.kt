@@ -60,7 +60,6 @@ interface Strings {
     val setInitialBalance: String
     val addOneOff: String
     val thisMonth: String
-    val reportsComingSoon: String
     val switchAccount: String
     val nothingThisMonth: String
     val decimalSeparator: String
@@ -69,7 +68,7 @@ interface Strings {
     val incomeSection: String
     val expenseSection: String
     val recurringSection: String
-    val oneOffSection: String
+    val eventualSection: String
     val net: String
     val addIncome: String
     val received: String
@@ -77,12 +76,28 @@ interface Strings {
     val groupLabel: String
     val groupHint: String
     val dateLabel: String
+    val numberLabel: String
     val noteLabel: String
     val entries: String
     val noEntries: String
     val addEntry: String
+    val editEntry: String
     val remove: String
     val oneOffHint: String
+    val categories: String
+    val uncategorized: String
+    val spendByMonth: String
+    val allCategories: String
+    val nothingSpentThisYear: String
+    val shareOfYear: String
+    val currency: String
+    val currencyNone: String
+    val currencyReal: String
+    val currencyEuro: String
+    val currencyDollar: String
+    val currencyCustom: String
+    val currencySymbolLabel: String
+    val editAccount: String
     fun typeName(type: ExpenseType): String
     fun month(m: Month): String
     fun monthShort(m: Month): String

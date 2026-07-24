@@ -3,14 +3,16 @@ package com.mdmoney.data
 import com.mdmoney.domain.Expense
 import com.mdmoney.domain.ExpenseType
 import com.mdmoney.domain.Month
+import com.mdmoney.domain.parseVaultLink
 
 /**
  * Converts between the on-disk markdown note and the [Expense] domain model.
  *
- * Reading is tolerant (accepts the legacy Portuguese `fev` key). Writing standardizes month keys to
- * English (`feb`), preserves every frontmatter key the app doesn't manage and the markdown body,
- * and only reformats a month's amount when its value actually changed — so untouched numbers keep
- * their exact original text.
+ * Reading is tolerant (accepts the legacy Portuguese `fev` key, and a `category:` written either as
+ * a `"[[casa|Casa]]"` link or as the plain `casa` that predates links). Writing standardizes month
+ * keys to English (`feb`), preserves every frontmatter key the app doesn't manage and the markdown
+ * body, and only reformats a month's amount when its value actually changed — so untouched numbers
+ * keep their exact original text.
  */
 object ExpenseMapper {
 
@@ -37,7 +39,9 @@ object ExpenseMapper {
             // name the app never looks up, hiding every note in the account.
             account = account,
             title = note.scalar("title") ?: id,
-            category = note.scalar("category"),
+            // The link's target is the category's identity (its note's name); the title half is
+            // presentation and is read from that note, not from here.
+            category = parseVaultLink(note.scalar("category"))?.target,
             year = note.scalar("year")?.toIntOrNull() ?: fallbackYear,
             type = type,
             period = period,
@@ -52,9 +56,14 @@ object ExpenseMapper {
     /**
      * Renders [updated] back to markdown. Pass the note's [originalContent] and the [original]
      * (as previously read) to preserve untouched numbers and unknown frontmatter; pass null for a
-     * brand-new note.
+     * brand-new note. [links] supplies the display titles for the category/account links.
      */
-    fun write(originalContent: String?, original: Expense?, updated: Expense): String {
+    fun write(
+        originalContent: String?,
+        original: Expense?,
+        updated: Expense,
+        links: VaultLinks = VaultLinks.Empty,
+    ): String {
         val note = originalContent?.let { FrontmatterParser.parse(it) } ?: MarkdownNote(mutableListOf(), "")
 
         // Migrate legacy month keys (fev -> feb) in place, keeping their original value text.
@@ -65,10 +74,13 @@ object ExpenseMapper {
 
         // Managed classification fields (short, stable strings).
         note.setScalar("title", updated.title)
-        if (updated.category != null || note.hasKey("category")) note.setScalar("category", updated.category)
-        // Preserve the user's existing `conta:` verbatim (its casing may differ from the folder);
-        // only stamp it for a brand-new note that has none.
-        if (!note.hasKey("conta")) note.setScalar("conta", updated.account)
+        // Category and account are links into their metadata notes, so the note is navigable in
+        // Obsidian and every category collects its own backlinks.
+        note.setLink("category", updated.category) { links.category(it) }
+        // `conta:` is the legacy plain-text ancestor of this key. It is left exactly as the user
+        // wrote it (its casing may differ from the folder) but never added to a new note: the
+        // account's identity has always been the folder, and now `account:` says so as a link.
+        note.setLink("account", updated.account, after = "conta") { links.account(it) }
         note.setScalar("year", updated.year.toString())
         note.setScalar("type", updated.type.id)
         if (updated.period != null || note.hasKey("period")) note.setScalar("period", updated.period)

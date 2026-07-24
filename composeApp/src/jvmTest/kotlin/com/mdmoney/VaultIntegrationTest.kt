@@ -227,7 +227,9 @@ class VaultIntegrationTest {
 
         val raw = File(acct, "2026 Jul - Alimentação.md").readText()
         assertTrue(raw.contains("month: July"), raw)
-        assertTrue(raw.contains("category: food"), raw)
+        // The category is a link into its own note, which the write created on the way past.
+        assertTrue(raw.contains("""category: "[[food|Food]]""""), raw)
+        assertTrue(File(vault, "categories/food.md").isFile, "a link the app writes must not dangle")
         assertTrue(raw.contains("total: 26.78"), raw)
         assertTrue(raw.contains("| 20260715 | Starbucks    | 10.23  |"), raw)
         assertTrue(raw.contains("| 20260714 | Starbucks    | 11.23  |"), raw)

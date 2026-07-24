@@ -14,8 +14,8 @@ frontmatter holds twelve monthly amounts plus a paid flag, matching the format a
 ```yaml
 ---
 title: Educbank - Escola Helen
-category: educação
-conta: Nubank
+category: "[[educação|Educação]]"
+account: "[[Nubank|Nubank]]"
 year: 2026
 type: recurring-variable      # eventual | recurring-fixed | recurring-variable
 period: Mensal
@@ -27,6 +27,14 @@ feb-paid: true
 # … mar … dec, each with a *-paid flag
 ---
 ```
+
+`category:` and `account:` are **wikilinks** into the notes that describe them (see below), quoted
+because Obsidian reads a bare `[[x]]` in a property as a list rather than a link. In both, the link's
+**target is the identity** and the display half is only presentation — read from the target's own
+note, never from the link text, so renaming a category in Obsidian renames it everywhere without
+touching a single expense. A plain `category: educação` from before links existed is read as exactly
+the same category, so an un-migrated vault keeps working; `./gradlew :composeApp:migrateVault` (below)
+brings one forward.
 
 Four kinds of line item, all expressed over the same twelve monthly slots:
 
@@ -40,7 +48,27 @@ Four kinds of line item, all expressed over the same twelve monthly slots:
   unaffected.
 
 Reading is tolerant of the legacy Portuguese `fev` key; writing standardizes to `feb`. Unknown
-frontmatter keys (e.g. `renewal_date`) and the note body are preserved on save.
+frontmatter keys (e.g. `renewal_date`) and the note body are preserved on save. The older `conta:`
+key is the plain-text ancestor of `account:`: nothing reads it any more, and it is never added to a
+new note, but where it exists it is left exactly as written.
+
+### Categories
+
+A category is a note in the vault's **`categories/` folder**, and its file name is its identity:
+
+```yaml
+---
+type: category
+title: Casa
+description: Tudo o que a casa consome — água, luz, seguro, manutenção.
+---
+```
+
+`categories/` sits beside the account folders but is **not an account**, and the app never lists it as
+one. Because every expense links to it, a category collects the backlinks of everything filed under it
+and can be described in prose like any other note. The app creates a note for any category it sees
+without one — so no link it writes ever dangles — but never edits one that exists: the title and
+description are yours.
 
 ### One-off spending: ledger notes
 
@@ -51,8 +79,8 @@ account / month / group**, named `<year> <Mon> - <group>.md`, holding a table of
 ```yaml
 ---
 title: Alimentação
-category: food
-conta: nubank
+category: "[[food|Alimentação]]"
+account: "[[nubank|Nubank]]"
 year: 2026
 month: July
 total: 26.78
@@ -76,9 +104,13 @@ frontmatter records the opening balance per year:
 
 ```yaml
 type: account
-account: Regions
+account: nubank
+title: Nubank
 initial-2026: 1200
 ```
+
+`title:` is what the `account:` links display; the folder name remains the account's identity, which
+is why the two are free to differ in casing.
 
 The Home screen shows the account **balance = opening balance + income received − everything paid**
 for the year (a checkbook: only settled months move the figure), and can set the opening balance in
@@ -90,7 +122,13 @@ Opening an account lands on a **bottom-tab shell**: **Home** (balance + this mon
 off / edit, grouped into **income**, **recurring**, and **one-off** sections each carrying its own
 month total, plus add-one-off-expense and add-income actions), **Annual** (the full yearly
 grid, with income and expenses totalled in separate sections and reconciled by a net row),
-**Reports** (placeholder), and **Settings**.
+**Reports**, and **Settings**.
+
+**Reports** answers where the money went: every category of the year, heaviest first, with its share
+of the total. Opening one shows its description, a chart of the twelve months, and every expense and
+ledger filed under it — a ledger row opening the purchases behind its total. Income is excluded, since
+a category collects spending and charting a salary among the bills it pays would sum two different
+things. Money with no category is reported as its own row rather than dropped.
 
 Reads are served from a small **SQLite cache** (`androidx.sqlite:sqlite-bundled`, hand-written SQL in
 `data/CacheDb.kt`) so screens paint instantly and aggregations run as `SUM(...)` queries. Markdown
@@ -122,6 +160,22 @@ The storage layer is the only platform-specific code, behind the `VaultStorage` 
   `./gradlew :composeApp:installDebug`.
 - **iOS:** open `iosApp/iosApp.xcodeproj` in Xcode and run (the build embeds the Kotlin framework).
 - **Tests:** `./gradlew :composeApp:jvmTest`
+
+## Migrating a vault to the current format
+
+Gives every category a note and rewrites `category:`/`account:` as links to them:
+
+```
+./gradlew :composeApp:migrateVault -Pvault=/path/to/vault          # preview: writes nothing
+./gradlew :composeApp:migrateVault -Pvault=/path/to/vault -Papply  # write
+```
+
+It previews by default and never defaults the path, because a task that rewrites a whole vault should
+have to be told which one. It owns no formatting of its own — each note is read with the app's reader
+and written straight back with the app's writer, so a migrated note is by construction one the app
+would have written itself, and the usual guarantees (unknown keys, prose, untouched amounts) hold. It
+is idempotent: a link that already resolves is left as written, so a second run changes nothing and a
+title you tuned in Obsidian is never stamped over.
 
 ## Versioning & release notes
 

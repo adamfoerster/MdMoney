@@ -3,6 +3,7 @@ package com.mdmoney.data
 import com.mdmoney.domain.Ledger
 import com.mdmoney.domain.LedgerEntry
 import com.mdmoney.domain.Month
+import com.mdmoney.domain.parseVaultLink
 
 /**
  * Converts between a ledger note on disk and the [Ledger] model.
@@ -12,8 +13,8 @@ import com.mdmoney.domain.Month
  * ```
  * ---
  * title: Alimentação
- * category: food
- * conta: nubank
+ * category: "[[food|Alimentação]]"
+ * account: "[[nubank|Nubank]]"
  * year: 2026
  * month: July
  * total: 26.78
@@ -45,7 +46,7 @@ object LedgerMapper {
             id = id,
             account = account,
             title = note.scalar("title") ?: id,
-            category = note.scalar("category"),
+            category = parseVaultLink(note.scalar("category"))?.target,
             year = note.scalar("year")?.toIntOrNull() ?: fallbackYear,
             month = month,
             entries = readTable(note.body),
@@ -54,15 +55,18 @@ object LedgerMapper {
 
     /**
      * Renders [ledger] back to markdown. Pass [originalContent] to keep unknown frontmatter and any
-     * prose the user wrote around the table; pass null for a new note.
+     * prose the user wrote around the table; pass null for a new note. [links] supplies the display
+     * titles for the category/account links.
      */
-    fun write(originalContent: String?, ledger: Ledger): String {
+    fun write(originalContent: String?, ledger: Ledger, links: VaultLinks = VaultLinks.Empty): String {
         val note = originalContent?.let { FrontmatterParser.parse(it) }
             ?: MarkdownNote(mutableListOf(), "")
 
         note.setScalar("title", ledger.title)
-        if (ledger.category != null || note.hasKey("category")) note.setScalar("category", ledger.category)
-        note.setScalar("conta", ledger.account)
+        // As in ExpenseMapper: links into the metadata notes, and a legacy `conta:` is left as
+        // written rather than stamped over or added.
+        note.setLink("category", ledger.category) { links.category(it) }
+        note.setLink("account", ledger.account, after = "conta") { links.account(it) }
         note.setScalar("year", ledger.year.toString())
         note.setScalar(KEY_MONTH, ledger.month.english)
         note.setScalar(KEY_TOTAL, formatAmount(ledger.total))

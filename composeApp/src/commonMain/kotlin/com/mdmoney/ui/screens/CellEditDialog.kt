@@ -19,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.text.KeyboardOptions
+import com.mdmoney.LocalCurrencySymbol
 import com.mdmoney.LocalDecimalSeparator
 import com.mdmoney.LocalStrings
 import com.mdmoney.data.formatInput
@@ -35,6 +36,7 @@ fun CellEditDialog(
 ) {
     val s = LocalStrings.current
     val sep = LocalDecimalSeparator.current
+    val cur = LocalCurrencySymbol.current
     var text by remember { mutableStateOf(expense.amount(month)?.let { formatInput(it, sep) } ?: "") }
     var paid by remember { mutableStateOf(expense.isPaid(month)) }
 
@@ -48,6 +50,7 @@ fun CellEditDialog(
                     onValueChange = { text = it },
                     singleLine = true,
                     label = { Text(s.amountLabel) },
+                    prefix = if (cur.isNotEmpty()) ({ Text(cur) }) else null,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                 )
                 Row(

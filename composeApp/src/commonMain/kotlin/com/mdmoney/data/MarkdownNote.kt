@@ -25,9 +25,13 @@ class MarkdownNote(
     /**
      * Sets [key] to [value] (empty/null renders as a bare `key:`). If [key] is absent, the first
      * present alias in [aliases] is renamed in place to [key] (preserving position); any remaining
-     * alias entries are dropped. When nothing matches, the entry is appended.
+     * alias entries are dropped.
+     *
+     * When nothing matches, the entry is added straight after [after] when that key is present, and
+     * appended otherwise. These are notes people read in Obsidian, so a key added to an existing
+     * note should land beside its relatives rather than below twelve months of amounts.
      */
-    fun setScalar(key: String, value: String?, aliases: List<String> = emptyList()) {
+    fun setScalar(key: String, value: String?, aliases: List<String> = emptyList(), after: String? = null) {
         val rendered = value?.trim().orEmpty()
         val allKeys = listOf(key) + aliases
         val idx = entries.indexOfFirst { it.key in allKeys }
@@ -37,9 +41,11 @@ class MarkdownNote(
             for (i in entries.indices.reversed()) {
                 if (i != idx && entries[i].key in allKeys) entries.removeAt(i)
             }
-        } else {
-            entries.add(FmEntry.Scalar(key, rendered))
+            return
         }
+        val anchor = after?.let { indexOfKey(it) }?.takeIf { it >= 0 }
+        if (anchor == null) entries.add(FmEntry.Scalar(key, rendered))
+        else entries.add(anchor + 1, FmEntry.Scalar(key, rendered))
     }
 
     fun removeKey(key: String) {

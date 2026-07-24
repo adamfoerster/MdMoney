@@ -23,26 +23,33 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.mdmoney.LocalCurrencySymbol
 import com.mdmoney.LocalDecimalSeparator
 import com.mdmoney.LocalStrings
 import com.mdmoney.data.formatInput
 import com.mdmoney.data.parseAmount
+import com.mdmoney.domain.Category
 import com.mdmoney.domain.Expense
 import com.mdmoney.domain.ExpenseType
 import com.mdmoney.domain.Month
+import com.mdmoney.domain.resolveCategorySlug
 import com.mdmoney.ui.AppModel
 import com.mdmoney.ui.EditorState
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun EditExpenseSheet(model: AppModel, editor: EditorState) {
+fun EditExpenseSheet(model: AppModel, editor: EditorState, categories: List<Category> = emptyList()) {
     val s = LocalStrings.current
     val sep = LocalDecimalSeparator.current
+    val cur = LocalCurrencySymbol.current
     val initial = editor.initial
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     var title by remember { mutableStateOf(initial.title) }
-    var category by remember { mutableStateOf(initial.category ?: "") }
+    // The field speaks titles; the note stores the slug the link points at.
+    var category by remember {
+        mutableStateOf(initial.category?.let { slug -> categories.firstOrNull { it.slug == slug }?.title ?: slug } ?: "")
+    }
     var period by remember { mutableStateOf(initial.period ?: "") }
     var type by remember { mutableStateOf(initial.type) }
     var fixedAmount by remember {
@@ -104,6 +111,7 @@ fun EditExpenseSheet(model: AppModel, editor: EditorState) {
                         value = fixedAmount,
                         onValueChange = { fixedAmount = it },
                         label = { Text(s.amountLabel) },
+                        prefix = if (cur.isNotEmpty()) ({ Text(cur) }) else null,
                         supportingText = { Text(s.fixedAmountHint) },
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
@@ -120,6 +128,7 @@ fun EditExpenseSheet(model: AppModel, editor: EditorState) {
                         value = eventualAmount,
                         onValueChange = { eventualAmount = it },
                         label = { Text(s.amountLabel) },
+                        prefix = if (cur.isNotEmpty()) ({ Text(cur) }) else null,
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
@@ -143,7 +152,8 @@ fun EditExpenseSheet(model: AppModel, editor: EditorState) {
 
             Button(
                 onClick = {
-                    model.saveExpense(editor.original, buildExpense(initial, title, category, period, type, fixedAmount, eventualMonth, eventualAmount))
+                    val slug = resolveCategorySlug(category, categories)
+                    model.saveExpense(editor.original, buildExpense(initial, title, slug, period, type, fixedAmount, eventualMonth, eventualAmount))
                 },
                 enabled = title.isNotBlank(),
                 modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
@@ -155,7 +165,7 @@ fun EditExpenseSheet(model: AppModel, editor: EditorState) {
 private fun buildExpense(
     initial: Expense,
     title: String,
-    category: String,
+    category: String?,
     period: String,
     type: ExpenseType,
     fixedAmount: String,
@@ -176,7 +186,7 @@ private fun buildExpense(
     }
     return initial.copy(
         title = title.trim(),
-        category = category.trim().ifBlank { null },
+        category = category,
         period = period.trim().ifBlank { null },
         type = type,
         amounts = amounts,

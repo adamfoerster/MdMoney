@@ -25,8 +25,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.mdmoney.LocalStrings
+import com.mdmoney.domain.Currency
 import com.mdmoney.ui.AppModel
 import com.mdmoney.ui.UiState
+import com.mdmoney.ui.components.CurrencyPicker
 import com.mdmoney.ui.components.Eyebrow
 import com.mdmoney.ui.components.HairlineDivider
 import com.mdmoney.ui.components.IndexRow
@@ -101,19 +103,29 @@ fun AccountsScreen(model: AppModel, state: UiState) {
 
     if (showAdd) {
         var name by remember { mutableStateOf("") }
+        var currency by remember { mutableStateOf(Currency.NONE) }
         AlertDialog(
             onDismissRequest = { showAdd = false },
             title = { Text(s.addAccount, style = MaterialTheme.typography.titleLarge) },
             text = {
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it },
-                    singleLine = true,
-                    label = { Text(s.accountName) },
-                )
+                Column {
+                    OutlinedTextField(
+                        value = name,
+                        onValueChange = { name = it },
+                        singleLine = true,
+                        label = { Text(s.accountName) },
+                    )
+                    Text(
+                        s.currency,
+                        style = MaterialTheme.typography.labelLarge,
+                        color = reino.inkSoft,
+                        modifier = Modifier.padding(top = 16.dp, bottom = 4.dp),
+                    )
+                    CurrencyPicker(selected = currency, onSelect = { currency = it })
+                }
             },
             confirmButton = {
-                TextButton(enabled = name.isNotBlank(), onClick = { model.createAccount(name); showAdd = false }) {
+                TextButton(enabled = name.isNotBlank(), onClick = { model.createAccount(name, currency); showAdd = false }) {
                     Text(s.create)
                 }
             },

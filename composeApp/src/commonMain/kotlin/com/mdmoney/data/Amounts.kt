@@ -23,16 +23,19 @@ fun formatAmount(value: Double): String {
 
 /**
  * Formats an amount for **display**, always with exactly two decimals and the given [separator]
- * (`.` or `,`), e.g. `1.234,50` vs `1234.50`. Distinct from [formatAmount], which is for the
- * frontmatter and trims trailing zeros; the display separator must never leak into the files.
+ * (`.` or `,`), e.g. `1234,50` vs `1234.50`. When a [symbol] is given (the account's currency) it is
+ * prefixed after the sign — `-R$ 1234,50`. Distinct from [formatAmount], which is for the frontmatter
+ * and trims trailing zeros; neither the display separator nor the symbol must ever leak into a file.
  */
-fun formatMoney(value: Double, separator: Char): String {
+fun formatMoney(value: Double, separator: Char, symbol: String = ""): String {
     val negative = value < 0
     val cents = round(abs(value) * 100.0).toLong()
     val whole = cents / 100
     val rem = cents % 100
     val sign = if (negative && cents != 0L) "-" else ""
-    return "$sign$whole$separator${rem.toString().padStart(2, '0')}"
+    // A non-breaking space keeps the symbol on the same line as its figure inside tight columns.
+    val prefix = if (symbol.isEmpty()) "" else "$symbol "
+    return "$sign$prefix$whole$separator${rem.toString().padStart(2, '0')}"
 }
 
 /**

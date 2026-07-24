@@ -141,6 +141,27 @@ tasks.withType<Test> {
     systemProperty("mdmoney.projectRoot", rootDir.absolutePath)
 }
 
+/**
+ * Rewrites a vault to the current note format (see `VaultMigration`). Previews by default:
+ *
+ *     ./gradlew :composeApp:migrateVault -Pvault=/path/to/vault [-Papply]
+ *
+ * The path is never defaulted — a task that rewrites a whole vault must be told which one.
+ */
+val migrateVault by tasks.registering(JavaExec::class) {
+    group = "mdmoney"
+    description = "Rewrites a vault's notes to the current format. -Pvault=<path> [-Papply]"
+    val jvmMain = kotlin.jvm().compilations.getByName("main")
+    classpath = files(jvmMain.output.allOutputs, jvmMain.runtimeDependencyFiles)
+    dependsOn(jvmMain.compileTaskProvider)
+    mainClass.set("com.mdmoney.tools.MigrateVaultKt")
+    doFirst {
+        val vault = providers.gradleProperty("vault").orNull
+            ?: error("Which vault? Pass -Pvault=/path/to/vault")
+        args = listOfNotNull(vault, "--apply".takeIf { project.hasProperty("apply") })
+    }
+}
+
 compose.desktop {
     application {
         mainClass = "com.mdmoney.MainKt"

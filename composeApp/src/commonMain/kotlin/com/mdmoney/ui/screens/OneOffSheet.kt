@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -24,8 +25,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.mdmoney.LocalCurrencySymbol
 import com.mdmoney.LocalStrings
 import com.mdmoney.data.parseAmount
+import com.mdmoney.domain.resolveCategorySlug
 import com.mdmoney.ui.AppModel
 import com.mdmoney.ui.OneOffState
 import com.mdmoney.ui.components.Eyebrow
@@ -40,6 +43,7 @@ import com.mdmoney.ui.theme.LocalReinoColors
 fun OneOffSheet(model: AppModel, state: OneOffState) {
     val s = LocalStrings.current
     val reino = LocalReinoColors.current
+    val cur = LocalCurrencySymbol.current
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     var group by remember { mutableStateOf(state.group) }
@@ -49,7 +53,14 @@ fun OneOffSheet(model: AppModel, state: OneOffState) {
     var amount by remember { mutableStateOf("") }
 
     ModalBottomSheet(onDismissRequest = { model.closeOneOff() }, sheetState = sheetState) {
-        Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 32.dp)) {
+        // The fields, chips and the Save button add up to more than the sheet's height on a phone;
+        // without a scroll the button at the bottom is simply clipped off, so it never shows.
+        Column(
+            Modifier.fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 32.dp),
+        ) {
             Eyebrow("${s.thisMonth} · ${s.month(state.month)}")
             Text(
                 s.addOneOff,
@@ -88,10 +99,16 @@ fun OneOffSheet(model: AppModel, state: OneOffState) {
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
             )
+            // Chips carry a category's title; typing one that already exists lands on it rather
+            // than forking a second note meaning the same thing (see `resolveCategorySlug`).
             if (state.knownCategories.isNotEmpty()) {
                 Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     state.knownCategories.forEach { c ->
-                        FilterChip(selected = category == c, onClick = { category = c }, label = { Text(c) })
+                        FilterChip(
+                            selected = category.trim().equals(c.title, ignoreCase = true),
+                            onClick = { category = c.title },
+                            label = { Text(c.title) },
+                        )
                     }
                 }
             }
@@ -115,13 +132,16 @@ fun OneOffSheet(model: AppModel, state: OneOffState) {
                 value = amount,
                 onValueChange = { amount = it },
                 label = { Text(s.amountLabel) },
+                prefix = if (cur.isNotEmpty()) ({ Text(cur) }) else null,
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                 modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
             )
 
             Button(
-                onClick = { model.saveOneOff(group, category, date, note, parseAmount(amount)) },
+                onClick = {
+                    model.saveOneOff(group, resolveCategorySlug(category, state.knownCategories), date, note, parseAmount(amount))
+                },
                 enabled = group.isNotBlank() && parseAmount(amount) != null && date.length == 8,
                 modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
             ) { Text(s.save) }

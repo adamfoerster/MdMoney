@@ -6,7 +6,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.RadioButtonDefaults
@@ -34,7 +36,9 @@ fun SettingsScreen(model: AppModel, state: UiState) {
     val reino = LocalReinoColors.current
 
     Surface(Modifier.fillMaxSize()) {
-        Column(Modifier.fillMaxSize().padding(horizontal = 24.dp)) {
+        // The options plus the vault section and version run past a short screen; without a scroll
+        // the bottom is simply clipped and unreachable.
+        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp)) {
             Spacer(Modifier.height(16.dp))
             ReinoButton("‹ ${s.accounts}", onClick = { model.back() }, variant = ReinoButtonVariant.Ghost)
             Text(

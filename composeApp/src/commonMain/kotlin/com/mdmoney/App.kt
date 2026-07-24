@@ -42,6 +42,12 @@ val LocalStrings = staticCompositionLocalOf<Strings> { EnStrings }
 /** The cents separator character (`.` or `,`) for displaying and editing amounts. */
 val LocalDecimalSeparator = staticCompositionLocalOf { '.' }
 
+/**
+ * The open account's currency symbol (`R$`, `€`, `$`, a custom one, or `""` for none), prefixed onto
+ * every figure. Empty by default and outside an open account, where no figures are shown anyway.
+ */
+val LocalCurrencySymbol = staticCompositionLocalOf { "" }
+
 @Composable
 fun App(storage: VaultStorage, settings: AppSettings, dbPath: String, initialAccount: String? = null) {
     val scope = rememberCoroutineScope()
@@ -52,6 +58,7 @@ fun App(storage: VaultStorage, settings: AppSettings, dbPath: String, initialAcc
         CompositionLocalProvider(
             LocalStrings provides stringsFor(state.language),
             LocalDecimalSeparator provides state.decimalSeparator.char,
+            LocalCurrencySymbol provides state.currency.symbol,
         ) {
             // Paper extends edge-to-edge (behind the status bar / home indicator); content is inset.
             Surface(Modifier.fillMaxSize()) {
@@ -65,16 +72,16 @@ fun App(storage: VaultStorage, settings: AppSettings, dbPath: String, initialAcc
                                 when (state.tab) {
                                     HomeTab.HOME -> HomeScreen(model, state)
                                     HomeTab.ANNUAL -> AccountGridScreen(model, state)
-                                    HomeTab.REPORTS -> ReportsScreen()
+                                    HomeTab.REPORTS -> ReportsScreen(model, state)
                                     HomeTab.SETTINGS -> SettingsScreen(model, state)
                                 }
                             }
                             ReinoTabBar(current = state.tab, onSelect = { model.selectTab(it) })
                         }
                     }
-                    state.editor?.let { EditExpenseSheet(model, it) }
+                    state.editor?.let { EditExpenseSheet(model, it, state.categories) }
                     state.oneOff?.let { OneOffSheet(model, it) }
-                    state.ledger?.let { LedgerSheet(model, it) }
+                    state.ledger?.let { LedgerSheet(model, it, state.categories) }
                 }
             }
         }

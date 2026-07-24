@@ -1,5 +1,6 @@
 package com.mdmoney.data
 
+import com.mdmoney.domain.Category
 import com.mdmoney.domain.Ledger
 import com.mdmoney.domain.LedgerEntry
 import com.mdmoney.domain.Month
@@ -11,12 +12,17 @@ import kotlin.test.assertTrue
 
 class LedgerMapperTest {
 
+    private val links = VaultLinks.of(
+        categories = listOf(Category("food", "Alimentação")),
+        accountTitles = mapOf("nubank" to "Nubank"),
+    )
+
     // The exact shape requested, verbatim.
     private val sample = """
         ---
         title: Alimentação
-        category: food
-        conta: nubank
+        category: "[[food|Alimentação]]"
+        account: "[[nubank|Nubank]]"
         year: 2026
         month: July
         total: 26.78
@@ -35,7 +41,7 @@ class LedgerMapperTest {
         val l = assertNotNull(LedgerMapper.read("2026 Jul - Alimentação", "nubank", sample, 2026))
 
         assertEquals("Alimentação", l.title)
-        assertEquals("food", l.category)
+        assertEquals("food", l.category, "the link's target is the category, not its display title")
         assertEquals(2026, l.year)
         assertEquals(Month.JUL, l.month)
         assertEquals(3, l.entries.size)
@@ -64,7 +70,51 @@ class LedgerMapperTest {
     @Test
     fun round_trips_unchanged() {
         val l = assertNotNull(LedgerMapper.read("x", "nubank", sample, 2026))
-        assertEquals(sample, LedgerMapper.write(sample, l))
+        assertEquals(sample, LedgerMapper.write(sample, l, links))
+    }
+
+    /**
+     * The vault predates links, so a plain `category: food` must be read the same and written
+     * forward — that upgrade *is* the migration, and it runs through this writer.
+     */
+    @Test
+    fun upgrades_a_legacy_note_to_links_without_disturbing_it() {
+        val legacy = """
+            ---
+            title: Alimentação
+            category: food
+            conta: nubank
+            year: 2026
+            month: July
+            total: 10.23
+            ---
+
+            | Date     | Note      | Amount |
+            | -------- | --------- | ------ |
+            | 20260715 | Starbucks | 10.23  |
+        """.trimIndent() + "\n"
+
+        val l = assertNotNull(LedgerMapper.read("x", "nubank", legacy, 2026))
+        assertEquals("food", l.category, "a plain value reads as the same category a link does")
+
+        val out = LedgerMapper.write(legacy, l, links)
+        assertTrue(out.contains("""category: "[[food|Alimentação]]""""), out)
+        assertTrue(out.contains("""account: "[[nubank|Nubank]]""""), out)
+        assertTrue(out.contains("conta: nubank"), "the legacy key is left exactly as the user wrote it")
+        assertTrue(out.contains("| 20260715 | Starbucks | 10.23  |"), "the table is none of this migration's business")
+
+        // Running it twice must be the same as running it once.
+        val again = LedgerMapper.write(out, assertNotNull(LedgerMapper.read("x", "nubank", out, 2026)), links)
+        assertEquals(out, again)
+    }
+
+    /** A title tuned in Obsidian is the user's, and pointing at the right note is all the app asks. */
+    @Test
+    fun leaves_a_link_that_already_resolves_alone() {
+        val tuned = sample.replace("""category: "[[food|Alimentação]]"""", """category: "[[food|Nossa comida]]"""")
+        val l = assertNotNull(LedgerMapper.read("x", "nubank", tuned, 2026))
+        assertEquals("food", l.category)
+        assertEquals(tuned, LedgerMapper.write(tuned, l, links))
     }
 
     @Test
@@ -128,9 +178,12 @@ class LedgerMapperTest {
         )
         assertEquals("2026 Jul - Alimentação", l.id)
 
-        val out = LedgerMapper.write(null, l)
+        val out = LedgerMapper.write(null, l, links)
         assertTrue(out.startsWith("---\n"), out)
         assertTrue(out.contains("month: July"), out)
+        assertTrue(out.contains("""category: "[[food|Alimentação]]""""), out)
+        assertTrue(out.contains("""account: "[[nubank|Nubank]]""""), out)
+        assertFalse(out.contains("conta:"), "a new note carries `account:`, not the legacy key")
         assertTrue(out.contains("total: 10.23"), out)
         assertTrue(out.contains("| Date     | Note      | Amount |"), out)
         assertTrue(out.contains("| 20260715 | Starbucks | 10.23  |"), out)

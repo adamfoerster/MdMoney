@@ -37,6 +37,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import com.mdmoney.LocalStrings
+import com.mdmoney.LocalCurrencySymbol
 import com.mdmoney.LocalDecimalSeparator
 import com.mdmoney.data.formatMoney
 import com.mdmoney.domain.Expense
@@ -201,6 +202,7 @@ private fun ExpenseRow(
 ) {
     val reino = LocalReinoColors.current
     val sep = LocalDecimalSeparator.current
+    val cur = LocalCurrencySymbol.current
     Row(Modifier.fillMaxWidth().height(RowHeight)) {
         Box(
             Modifier.width(TitleWidth).height(RowHeight).clickable(onClick = onTitle).padding(horizontal = 8.dp),
@@ -219,7 +221,7 @@ private fun ExpenseRow(
                 MoneyCell(expense.amount(month), expense.isPaid(month), expense.isIncome, numberStyle) { onCell(month) }
             }
             Box(Modifier.width(TotalWidth).height(RowHeight).padding(horizontal = 8.dp), contentAlignment = Alignment.CenterEnd) {
-                Text(formatMoney(expense.total, sep), style = numberStyle.copy(fontWeight = FontWeight.SemiBold), color = reino.ink, maxLines = 1, softWrap = false)
+                Text(formatMoney(expense.total, sep, cur), style = numberStyle.copy(fontWeight = FontWeight.SemiBold), color = reino.ink, maxLines = 1, softWrap = false)
             }
         }
     }
@@ -230,6 +232,7 @@ private fun ExpenseRow(
 private fun MoneyCell(amount: Double?, paid: Boolean, isIncome: Boolean, numberStyle: TextStyle, onClick: () -> Unit) {
     val reino = LocalReinoColors.current
     val sep = LocalDecimalSeparator.current
+    val cur = LocalCurrencySymbol.current
     val hasValue = amount != null && amount != 0.0
     // A settled cell is tinted: brass for a paid bill, verdigris for income received.
     val accent = if (isIncome) reino.verdigris else reino.brass
@@ -243,7 +246,7 @@ private fun MoneyCell(amount: Double?, paid: Boolean, isIncome: Boolean, numberS
         Modifier.width(MonthWidth).height(RowHeight).background(bg).clickable(onClick = onClick).padding(horizontal = 8.dp),
         contentAlignment = Alignment.CenterEnd,
     ) {
-        Text(if (hasValue) formatMoney(amount!!, sep) else "·", style = numberStyle, color = color, maxLines = 1, softWrap = false)
+        Text(if (hasValue) formatMoney(amount!!, sep, cur) else "·", style = numberStyle, color = color, maxLines = 1, softWrap = false)
     }
 }
 
@@ -261,6 +264,7 @@ private fun NetRow(incomes: List<Expense>, expenses: List<Expense>, hScroll: Scr
     val reino = LocalReinoColors.current
     val s = LocalStrings.current
     val sep = LocalDecimalSeparator.current
+    val cur = LocalCurrencySymbol.current
     fun netOf(month: Month) =
         incomes.sumOf { it.amount(month) ?: 0.0 } - expenses.sumOf { it.amount(month) ?: 0.0 }
 
@@ -274,7 +278,7 @@ private fun NetRow(incomes: List<Expense>, expenses: List<Expense>, hScroll: Scr
                 val net = netOf(month)
                 Box(Modifier.width(MonthWidth).height(RowHeight).padding(horizontal = 8.dp), contentAlignment = Alignment.CenterEnd) {
                     Text(
-                        if (net == 0.0) "" else formatMoney(net, sep),
+                        if (net == 0.0) "" else formatMoney(net, sep, cur),
                         style = numberStyle.copy(fontWeight = FontWeight.SemiBold),
                         color = if (net < 0.0) reino.brassDeep else reino.verdigris,
                         maxLines = 1,
@@ -285,7 +289,7 @@ private fun NetRow(incomes: List<Expense>, expenses: List<Expense>, hScroll: Scr
             val grand = incomes.sumOf { it.total } - expenses.sumOf { it.total }
             Box(Modifier.width(TotalWidth).height(RowHeight).padding(horizontal = 8.dp), contentAlignment = Alignment.CenterEnd) {
                 Text(
-                    formatMoney(grand, sep),
+                    formatMoney(grand, sep, cur),
                     style = numberStyle.copy(fontWeight = FontWeight.Bold),
                     color = if (grand < 0.0) reino.brassDeep else reino.verdigris,
                     maxLines = 1,
@@ -306,6 +310,7 @@ private fun TotalsRow(
 ) {
     val reino = LocalReinoColors.current
     val sep = LocalDecimalSeparator.current
+    val cur = LocalCurrencySymbol.current
     HairlineDivider(strong = true)
     Row(Modifier.fillMaxWidth().height(RowHeight)) {
         Box(Modifier.width(TitleWidth).height(RowHeight).padding(horizontal = 8.dp), contentAlignment = Alignment.CenterStart) {
@@ -315,12 +320,12 @@ private fun TotalsRow(
             Month.ALL.forEach { month ->
                 val sum = rows.sumOf { it.amount(month) ?: 0.0 }
                 Box(Modifier.width(MonthWidth).height(RowHeight).padding(horizontal = 8.dp), contentAlignment = Alignment.CenterEnd) {
-                    Text(if (sum == 0.0) "" else formatMoney(sum, sep), style = numberStyle.copy(fontWeight = FontWeight.SemiBold), color = reino.ink, maxLines = 1, softWrap = false)
+                    Text(if (sum == 0.0) "" else formatMoney(sum, sep, cur), style = numberStyle.copy(fontWeight = FontWeight.SemiBold), color = reino.ink, maxLines = 1, softWrap = false)
                 }
             }
             val grand = rows.sumOf { it.total }
             Box(Modifier.width(TotalWidth).height(RowHeight).padding(horizontal = 8.dp), contentAlignment = Alignment.CenterEnd) {
-                Text(formatMoney(grand, sep), style = numberStyle.copy(fontWeight = FontWeight.Bold), color = accent, maxLines = 1, softWrap = false)
+                Text(formatMoney(grand, sep, cur), style = numberStyle.copy(fontWeight = FontWeight.Bold), color = accent, maxLines = 1, softWrap = false)
             }
         }
     }
