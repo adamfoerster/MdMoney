@@ -93,8 +93,11 @@ total: 26.78
 | 20260714 | Starbucks    | 11.23  |
 ```
 
-A note is read as a ledger when it has a `month:` key (a plain expense note never does), so existing
-vaults keep working. Its `total` is always recomputed from the rows, and it shows up like any other
+A note is read as a ledger when it has a `month:` key **and none of the twelve monthly amounts**
+(`jan:` … `dec:`, or their `*-paid` flags), so existing vaults keep working. Both halves matter: an
+Obsidian template applied over a folder can stamp `month:` onto notes that are plainly yearly bills,
+and reading one as a ledger would throw away its whole year. A ledger keeps its money in the table,
+never in month keys. Its `total` is always recomputed from the rows, and it shows up like any other
 line item — a row carrying that total in its month, **already paid**, since you record a purchase
 after making it. Prose and unknown keys around the table are preserved. The Annual grid and Home open
 the ledger rather than a value editor, because the amount is derived from the table.
@@ -160,6 +163,15 @@ The storage layer is the only platform-specific code, behind the `VaultStorage` 
   `./gradlew :composeApp:installDebug`.
 - **iOS:** open `iosApp/iosApp.xcodeproj` in Xcode and run (the build embeds the Kotlin framework).
 - **Tests:** `./gradlew :composeApp:jvmTest`
+- **Desktop with hot reload:** `./gradlew :composeApp:hotRunJvm --auto` — edits to composables land in the
+  running window. This one needs a **JetBrains Runtime**, since redefining a class in a live JVM is a
+  JBR feature; `compose.reload.jbr.autoProvisioningEnabled` in `gradle.properties` lets the plugin
+  download JBR 21 on first run rather than failing on a machine that only has a plain JDK.
+
+Everything JVM-flavoured — desktop, Android and the tests — is built with **JDK 21**, declared as a
+Gradle toolchain in `composeApp/build.gradle.kts`, so the JDK that happens to run Gradle doesn't
+change the output. `gradle/gradle-daemon-jvm.properties` asks for the same version for the daemon
+itself; Gradle provisions it if the machine doesn't have one.
 
 ## Migrating a vault to the current format
 
@@ -209,9 +221,13 @@ python3 scripts/import_statement.py statement.xlsx /path/to/vault Regions [--dry
 ```
 
 The statement's `Category` becomes the group (the note's title and file name); `CATEGORY_SLUG` in the
-script maps it to the frontmatter `category`. Rows already present are skipped, so re-running merges
-rather than duplicating. Dates are tolerated as date cells or `m/d/yyyy` text, and negative amounts
-are stored positive.
+script maps it to the category note that `category:` links to, and a category with no note yet gets
+one, so no link it writes dangles. Dates are tolerated as date cells or `m/d/yyyy` text, and negative
+amounts are stored positive.
+
+Re-running merges rather than duplicating: rows already present are skipped, and the note is rewritten
+through the same round-trip the app guarantees — unknown frontmatter keys stay where they are, prose
+around the table survives, and a link title tuned in Obsidian is never stamped back over.
 
 ## Design
 

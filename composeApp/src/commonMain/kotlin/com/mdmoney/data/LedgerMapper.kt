@@ -25,9 +25,15 @@ import com.mdmoney.domain.parseVaultLink
  * | 20260715 | Starbucks | 10.23  |
  * ```
  *
- * A note is recognised as a ledger by its `month:` key (a plain expense note never has one), which
- * is what keeps existing vaults readable. Unknown frontmatter keys and any prose around the table
- * are preserved; `total` is always recomputed from the rows so the two can't drift apart.
+ * A note is recognised as a ledger by its `month:` key **together with the absence of monthly
+ * amounts** (`jan:` … `dec:`), which is what keeps existing vaults readable. The month alone is not
+ * enough: an Obsidian template applied over a folder stamps `month:` onto plain expense notes too,
+ * and reading one as a ledger throws away all twelve of its amounts — the whole year collapses into
+ * a single zero line in that month. A note that carries monthly amounts is an expense whatever else
+ * it says; a real ledger keeps its money in the table, never in month keys.
+ *
+ * Unknown frontmatter keys and any prose around the table are preserved; `total` is always
+ * recomputed from the rows so the two can't drift apart.
  */
 object LedgerMapper {
 
@@ -37,11 +43,23 @@ object LedgerMapper {
     /** True when [content] parses as a ledger rather than a plain expense note. */
     fun isLedger(content: String): Boolean = isLedger(FrontmatterParser.parse(content))
 
-    fun isLedger(note: MarkdownNote): Boolean = Month.fromEnglish(note.scalar(KEY_MONTH)) != null
+    fun isLedger(note: MarkdownNote): Boolean = ledgerMonth(note) != null
+
+    /**
+     * The month this ledger records, or null when [note] is not a ledger — either because it has no
+     * `month:` at all, or because it carries the twelve monthly amounts of an expense note and only
+     * picked the key up from a template.
+     */
+    private fun ledgerMonth(note: MarkdownNote): Month? =
+        Month.fromEnglish(note.scalar(KEY_MONTH))?.takeIf { !hasMonthlyAmounts(note) }
+
+    /** True when the note has any `jan:`/`jan-paid:` style key — the shape only an expense has. */
+    private fun hasMonthlyAmounts(note: MarkdownNote): Boolean =
+        Month.ALL.any { month -> month.aliases.any { note.hasKey(it) || note.hasKey("$it-paid") } }
 
     fun read(id: String, account: String, content: String, fallbackYear: Int): Ledger? {
         val note = FrontmatterParser.parse(content)
-        val month = Month.fromEnglish(note.scalar(KEY_MONTH)) ?: return null
+        val month = ledgerMonth(note) ?: return null
         return Ledger(
             id = id,
             account = account,

@@ -12,7 +12,40 @@ heading when you cut a release.
 
 ## [Unreleased]
 
-## [0.4.0] — 2026-07-22
+### Changed
+
+- **The app is built with JDK 21.** Kotlin's `jvmTarget` and Android's `compileOptions` moved from 17
+  to 21, and a Gradle `jvmToolchain(21)` now pins the JDK that compiles desktop, Android and the
+  tests — so the build no longer depends on whichever JDK happens to launch Gradle. Nothing about the
+  app or the vault format changes; Android still targets API 35 with a minimum of 26.
+- **Hot reload runs again on a machine without a JetBrains Runtime.** `:composeApp:hotRunJvm` needs a
+  JBR (class redefinition is a JBR feature) and asks for version 21; with only a plain JDK around it
+  stopped at "Failed to find suitable JetBrains Runtime 21 installation". Its fallback, Gradle's own
+  toolchain provisioning, can't fill that gap either — this build declares no toolchain download
+  repository — so `compose.reload.jbr.autoProvisioningEnabled` now lets the plugin fetch the JBR
+  itself, once, into Gradle's cache. Compilation is unaffected: it still runs on the toolchain JDK.
+
+- **The bank-statement importer writes the current note format.** `scripts/import_statement.py` was
+  still writing the plain-text `conta:`/`category:` of before links existed; it now writes
+  `account: "[[nubank|Nubank]]"` and `category: "[[food|Alimentação]]"` like the app, and creates the
+  `categories/` note for any category that doesn't have one yet, so no link it writes dangles. A
+  re-import also stopped rebuilding the note from scratch: unknown frontmatter keys, prose around the
+  table, and a link title tuned in Obsidian now survive it, as they do everywhere else. Nothing about
+  the app itself changed, and notes imported by the old version keep reading exactly as they did.
+
+## [0.4.1] — 2026-08-24
+
+### Fixed
+
+- **An account whose notes picked up a `month:` key shows all twelve months again.** A template
+  applied over a folder in Obsidian can stamp `month:` (and a checklist body) onto every note it
+  touches — and `month:` was the single thing that told a one-off group apart from a yearly bill. So
+  each stamped bill was read as that month's group of purchases, its total taken from a table that
+  isn't there: the whole year collapsed into one R$ 0,00 line in the stamped month, and every other
+  month of the account came up empty. A note that carries monthly amounts (`jan:` … `dec:`, or their
+  paid flags) is now read as the bill it is, whatever else its frontmatter says; a real group keeps
+  its money in its table and is unaffected. Nothing is rewritten — the stray key stays in the file,
+  it just no longer decides what the note is.
 
 ### Added
 

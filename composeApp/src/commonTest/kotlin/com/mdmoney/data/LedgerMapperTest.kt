@@ -8,6 +8,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class LedgerMapperTest {
@@ -65,6 +66,53 @@ class LedgerMapperTest {
                 """.trimIndent(),
             ),
         )
+    }
+
+    /**
+     * Regression: an Obsidian template applied over a folder stamped `month: July` (and a checklist
+     * body) onto every expense note in it. Read as ledgers, they lost all twelve amounts and turned
+     * into a single R$ 0 line in July — the account's other eleven months went blank. The monthly
+     * keys say what the note is; the stray `month:` is preserved but decides nothing.
+     */
+    @Test
+    fun an_expense_note_stamped_with_a_month_key_is_still_an_expense() {
+        val stamped = """
+            ---
+            title: Internet
+            year: 2026
+            type: recurring-variable
+            jul: 84.94
+            jul-paid: true
+            aug: 90
+            aug-paid: false
+            month: July
+            created: 2026-07-27
+            ---
+            # 2026 - July
+            - [ ] Pagar Condomínio
+        """.trimIndent() + "\n"
+
+        assertFalse(LedgerMapper.isLedger(stamped), "monthly amounts make it an expense note")
+        assertNull(LedgerMapper.read("Internet - 2026", "Regions", stamped, 2026))
+
+        val e = ExpenseMapper.read("Internet - 2026", "Regions", stamped, 2026)
+        assertEquals(84.94, e.amounts[Month.JUL])
+        assertEquals(90.0, e.amounts[Month.AUG], "August's amount must survive the stray key")
+    }
+
+    /** A month key on a note with nothing but *paid* flags is the same accident. */
+    @Test
+    fun a_paid_flag_alone_also_marks_the_note_as_an_expense() {
+        val stamped = """
+            ---
+            title: Ring
+            year: 2026
+            aug-paid: false
+            month: August
+            ---
+        """.trimIndent() + "\n"
+
+        assertFalse(LedgerMapper.isLedger(stamped))
     }
 
     @Test
