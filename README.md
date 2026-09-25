@@ -151,6 +151,8 @@ composeApp/
   src/jvmTest/        end-to-end test over the real nubank/ files
 iosApp/               SwiftUI host consuming the ComposeApp framework
 scripts/import_regions.py   one-time xlsx → Markdown importer for the Regions account
+scripts/GenerateIcons.java  builds every platform's app icon from icon/*.svg
+icon/                 app icon source artwork (light + dark SVG)
 nubank/               sample account data (existing Obsidian vault folder)
 ```
 
@@ -238,6 +240,12 @@ shadows. It is light-only by design. The three typefaces are bundled under
 `composeApp/src/commonMain/composeResources/font/` (all OFL-licensed via Google Fonts). Tokens live
 in `ui/theme/` (`Colors.kt`, `Type.kt`) and the reusable motifs (eyebrow, section band, index row,
 buttons) in `ui/components/ReinoComponents.kt`.
+
+The **app icon** — a brass coin on a balance scale — lives as two SVGs in `icon/` (light and dark).
+Every platform's icon is generated from them and committed: Android's adaptive icon (dark under
+night mode, plus a monochrome layer for themed icons), iOS's `AppIcon` with its dark appearance, and
+the desktop window icon and `.ico`/`.icns`/`.png` packages. After editing an SVG, regenerate with
+`java scripts/GenerateIcons.java` from the repo root (a JDK is all it needs).
 
 ## Language & number format
 

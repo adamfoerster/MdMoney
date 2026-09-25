@@ -180,6 +180,11 @@ compose.desktop {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
             packageName = "MdMoney"
             packageVersion = appVersion
+
+            // Generated from icon/*.svg by scripts/GenerateIcons.java, like every other platform's icon.
+            macOS { iconFile.set(project.file("icons/mdmoney.icns")) }
+            windows { iconFile.set(project.file("icons/mdmoney.ico")) }
+            linux { iconFile.set(project.file("icons/mdmoney.png")) }
         }
     }
 }

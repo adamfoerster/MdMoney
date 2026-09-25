@@ -12,6 +12,18 @@ heading when you cut a release.
 
 ## [Unreleased]
 
+## [0.5.0] — 2026-09-25
+
+### Added
+
+- **MdMoney has its own icon on every platform** — a brass coin on a balance scale, in a light and a
+  dark version. Android shows it as an adaptive icon that fits any launcher shape, turns dark in
+  night mode and follows the wallpaper under Android 13+ themed icons; iOS uses the dark version for
+  its dark home screen; the desktop window, the taskbar/Dock and the Windows, macOS and Linux
+  installers all carry it. Before this, Android and iOS showed the system's placeholder and desktop a
+  Java cup. The artwork lives in `icon/*.svg`, and `java scripts/GenerateIcons.java` rebuilds every
+  platform's icon from it.
+
 ### Changed
 
 - **The app is built with JDK 21.** Kotlin's `jvmTarget` and Android's `compileOptions` moved from 17

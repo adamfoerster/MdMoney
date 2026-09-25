@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="1024" height="1024">
+  <title>MdMoney</title>
+  <rect width="120" height="120" fill="#F4EEE2"/>
+  <rect x="10" y="10" width="100" height="100" fill="none" stroke="#C9BCA2" stroke-width="1.2"/>
+  <path d="M30 44 L20 68 M30 44 L40 68 M90 44 L80 68 M90 44 L100 68" fill="none" stroke="#28221B" stroke-width="3" stroke-linecap="square"/>
+  <path d="M60 36 L60 88 M46 88 L74 88 M30 44 L90 44 M18 68 L42 68 M78 68 L102 68" fill="none" stroke="#28221B" stroke-width="6" stroke-linecap="square"/>
+  <circle cx="30" cy="57" r="8" fill="#9C7C43"/>
+</svg>
