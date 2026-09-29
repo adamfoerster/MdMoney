@@ -1,6 +1,5 @@
 package com.mdmoney.ui.screens
 
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -32,6 +31,7 @@ import com.mdmoney.domain.resolveCategorySlug
 import com.mdmoney.ui.AppModel
 import com.mdmoney.ui.OneOffState
 import com.mdmoney.ui.components.Eyebrow
+import com.mdmoney.ui.components.chipRowScroll
 import com.mdmoney.ui.theme.LocalReinoColors
 
 /**
@@ -85,7 +85,7 @@ fun OneOffSheet(model: AppModel, state: OneOffState) {
             )
             // Reuse a group already in this account instead of retyping it.
             if (state.knownGroups.isNotEmpty()) {
-                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(Modifier.chipRowScroll(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     state.knownGroups.forEach { g ->
                         FilterChip(selected = group == g, onClick = { group = g }, label = { Text(g) })
                     }
@@ -102,7 +102,7 @@ fun OneOffSheet(model: AppModel, state: OneOffState) {
             // Chips carry a category's title; typing one that already exists lands on it rather
             // than forking a second note meaning the same thing (see `resolveCategorySlug`).
             if (state.knownCategories.isNotEmpty()) {
-                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(Modifier.chipRowScroll(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     state.knownCategories.forEach { c ->
                         FilterChip(
                             selected = category.trim().equals(c.title, ignoreCase = true),

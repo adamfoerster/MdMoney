@@ -12,6 +12,14 @@ heading when you cut a release.
 
 ## [Unreleased]
 
+## [0.6.1] — 2026-09-29
+
+### Fixed
+
+- **Chip rows (categories, groups, accounts, currencies) now scroll with a desktop mouse wheel.**
+  They only answered touch and Shift+wheel, so on desktop the categories past the edge were
+  unreachable.
+
 ## [0.6.0] — 2026-09-28
 
 ### Added

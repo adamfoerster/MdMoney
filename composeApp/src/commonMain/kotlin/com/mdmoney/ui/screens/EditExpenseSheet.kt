@@ -1,12 +1,10 @@
 package com.mdmoney.ui.screens
 
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -35,6 +33,7 @@ import com.mdmoney.domain.Month
 import com.mdmoney.domain.resolveCategorySlug
 import com.mdmoney.ui.AppModel
 import com.mdmoney.ui.EditorState
+import com.mdmoney.ui.components.chipRowScroll
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -91,7 +90,7 @@ fun EditExpenseSheet(model: AppModel, editor: EditorState, categories: List<Cate
             )
 
             Text(s.typeLabel, style = androidx.compose.material3.MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 10.dp, bottom = 4.dp))
-            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(Modifier.chipRowScroll(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 ExpenseType.entries.forEach { t ->
                     FilterChip(selected = type == t, onClick = { type = t }, label = { Text(s.typeName(t)) })
                 }
@@ -119,7 +118,7 @@ fun EditExpenseSheet(model: AppModel, editor: EditorState, categories: List<Cate
                     )
                 }
                 ExpenseType.EVENTUAL -> {
-                    Row(Modifier.horizontalScroll(rememberScrollState()).padding(vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(Modifier.chipRowScroll().padding(vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         Month.ALL.forEach { m ->
                             FilterChip(selected = eventualMonth == m, onClick = { eventualMonth = m }, label = { Text(s.monthShort(m)) })
                         }
