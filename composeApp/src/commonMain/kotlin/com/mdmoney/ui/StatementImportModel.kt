@@ -6,6 +6,7 @@ import com.mdmoney.domain.Category
 import com.mdmoney.domain.Currency
 import com.mdmoney.domain.Month
 import com.mdmoney.importer.AccountGroups
+import com.mdmoney.importer.EntryKey
 import com.mdmoney.importer.ExtractionResult
 import com.mdmoney.importer.GroupChoice
 import com.mdmoney.importer.ImportModelPreset
@@ -13,6 +14,7 @@ import com.mdmoney.importer.ImportPlanner
 import com.mdmoney.importer.ImportPlatform
 import com.mdmoney.importer.ImportResult
 import com.mdmoney.importer.LocalLlm
+import com.mdmoney.importer.PickedPdf
 import com.mdmoney.importer.ReviewRow
 import com.mdmoney.importer.StatementExtractor
 import kotlinx.coroutines.CancellationException
@@ -59,7 +61,14 @@ sealed interface ImportPhase {
         fun remainingSeconds(elapsedSeconds: Long): Long? =
             if (done <= 0 || total <= done) null else elapsedSeconds * (total - done) / done
     }
-    data class Review(val fileName: String, val result: ExtractionResult) : ImportPhase
+    data class Review(
+        val fileName: String,
+        val result: ExtractionResult,
+        /** How many pages the PDF has, for the viewer beside the amount review. */
+        val pageCount: Int = 0,
+        /** The row being checked against the PDF (an index into the rows); null when not reviewing. */
+        val reviewing: Int? = null,
+    ) : ImportPhase
     data class Done(val result: ImportResult) : ImportPhase
     data class Failed(val fileName: String?, val reason: String) : ImportPhase
 }
@@ -96,6 +105,12 @@ class StatementImportModel(
 
     private var readJob: Job? = null
     private var downloadJob: Job? = null
+
+    /** The statement under review, kept so its pages can be shown beside the lines read from it. */
+    private var pdf: PickedPdf? = null
+
+    /** What the chosen account already holds, for re-checking duplicates when an amount is corrected. */
+    private var existing: Map<EntryKey, Int> = emptyMap()
 
     init {
         refreshModelStatus()
@@ -188,6 +203,7 @@ class StatementImportModel(
     fun start(account: String) {
         readJob?.cancel()
         refreshModelStatus()
+        pdf = null
         _state.update { it.copy(phase = ImportPhase.Pick, rows = emptyList(), account = account, importing = false) }
         scope.launch { loadCurrency(account) }
     }
@@ -214,6 +230,7 @@ class StatementImportModel(
         if (rows.isEmpty()) return@launch
         val months = rows.map { it.tx.date.year to Month.ALL.first { m -> m.number == it.tx.date.month } }.toSet()
         val existing = runCatching { repo.existingEntryCounts(account, months) }.getOrDefault(emptyMap())
+        this@StatementImportModel.existing = existing
         _state.update { it.copy(rows = ImportPlanner.markExisting(it.rows, existing)) }
     }
 
@@ -251,9 +268,11 @@ class StatementImportModel(
                 val account = _state.value.account
                 val months = result.transactions.map { it.date.year to Month.ALL.first { m -> m.number == it.date.month } }.toSet()
                 val existing = account?.let { runCatching { repo.existingEntryCounts(it, months) }.getOrNull() }.orEmpty()
+                this@StatementImportModel.pdf = pdf
+                this@StatementImportModel.existing = existing
                 _state.update {
                     it.copy(
-                        phase = ImportPhase.Review(pdf.name, result),
+                        phase = ImportPhase.Review(pdf.name, result, pageCount = pages.size),
                         rows = ImportPlanner.initialRows(result.transactions, existing),
                     )
                 }
@@ -304,5 +323,47 @@ class StatementImportModel(
         }
     }
 
-    fun backToPick() = _state.update { it.copy(phase = ImportPhase.Pick, rows = emptyList()) }
+    fun backToPick() {
+        pdf = null
+        _state.update { it.copy(phase = ImportPhase.Pick, rows = emptyList()) }
+    }
+
+    // --- amount review (when the totals disagree) ---
+
+    /** Opens the PDF beside the first row, to check each amount against the page it was read from. */
+    fun openAmountReview() = updateReview { phase, rows -> phase.copy(reviewing = 0.takeIf { rows.isNotEmpty() }) }
+
+    fun closeAmountReview() = updateReview { phase, _ -> phase.copy(reviewing = null) }
+
+    /** The row under review is right (or has been corrected): on to the next, or back when it was the last. */
+    fun confirmAndNext() = updateReview { phase, rows ->
+        phase.copy(reviewing = phase.reviewing?.let { ImportPlanner.nextReview(it, rows.size) })
+    }
+
+    /** Corrects row [id]'s amount and re-totals the statement, so the user sees whether it now matches. */
+    fun setAmount(id: Int, amount: Double) = _state.update { st ->
+        val phase = st.phase as? ImportPhase.Review ?: return@update st
+        val rows = ImportPlanner.withAmount(st.rows, id, amount, existing)
+        st.copy(
+            rows = rows,
+            phase = phase.copy(result = phase.result.copy(reconciliation = ImportPlanner.reconcile(rows, phase.result.header))),
+        )
+    }
+
+    private fun updateReview(change: (ImportPhase.Review, List<ReviewRow>) -> ImportPhase.Review) = _state.update { st ->
+        val phase = st.phase as? ImportPhase.Review ?: return@update st
+        st.copy(phase = change(phase, st.rows))
+    }
+
+    /** Page [page] of the statement under review as PNG, [widthPx] wide; null when it can't be drawn. */
+    suspend fun renderPage(page: Int, widthPx: Int): ByteArray? {
+        val bytes = pdf?.bytes ?: return null
+        return try {
+            platform.renderPdfPage(bytes, page, widthPx)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Throwable) {
+            null
+        }
+    }
 }

@@ -44,8 +44,13 @@ import platform.Foundation.create
 import platform.Foundation.dataWithContentsOfURL
 import platform.Foundation.fileHandleForReadingAtPath
 import platform.Foundation.readDataOfLength
+import kotlinx.cinterop.useContents
+import platform.CoreGraphics.CGSizeMake
+import platform.PDFKit.PDFDisplayBox
 import platform.PDFKit.PDFDocument
 import platform.UIKit.UIApplication
+import platform.UIKit.UIImagePNGRepresentation
+import platform.UIKit.UIScreen
 import platform.UIKit.UIDocumentPickerDelegateProtocol
 import platform.UIKit.UIDocumentPickerViewController
 import platform.UniformTypeIdentifiers.UTTypePDF
@@ -93,6 +98,20 @@ class IosImportPlatform : ImportPlatform {
     override suspend fun pdfPages(bytes: ByteArray): List<String> = withContext(Dispatchers.Default) {
         val doc = PDFDocument(bytes.toNSData()) ?: error("not a PDF")
         (0 until doc.pageCount.toInt()).map { i -> doc.pageAtIndex(i.toULong())?.string ?: "" }
+    }
+
+    override suspend fun renderPdfPage(bytes: ByteArray, page: Int, widthPx: Int): ByteArray? = withContext(Dispatchers.Default) {
+        val doc = PDFDocument(bytes.toNSData()) ?: return@withContext null
+        val p = doc.pageAtIndex(page.toULong()) ?: return@withContext null
+        val (w, h) = p.boundsForBox(PDFDisplayBox.kPDFDisplayBoxCropBox).useContents { size.width to size.height }
+        // A page turned sideways is drawn turned, so its printed height becomes the width.
+        val (width, height) = if (p.rotation % 180L != 0L) h to w else w to h
+        if (width <= 0.0) return@withContext null
+        // The thumbnail is sized in points; dividing by the screen scale keeps it widthPx pixels wide.
+        val scale = UIScreen.mainScreen.scale
+        val points = widthPx / scale
+        val image = p.thumbnailOfSize(CGSizeMake(points, points * height / width), forBox = PDFDisplayBox.kPDFDisplayBoxCropBox)
+        UIImagePNGRepresentation(image)?.toByteArray()
     }
 
     override fun modelPath(fileName: String): String = "$modelsDir/$fileName"

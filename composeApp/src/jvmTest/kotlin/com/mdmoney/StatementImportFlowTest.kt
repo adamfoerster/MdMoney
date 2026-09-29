@@ -4,6 +4,7 @@ import com.mdmoney.data.VaultRepository
 import com.mdmoney.domain.LedgerEntry
 import com.mdmoney.domain.Month
 import com.mdmoney.importer.ImportEntry
+import com.mdmoney.importer.StatementExtractor
 import com.mdmoney.platform.JvmImportPlatform
 import com.mdmoney.platform.JvmPrefs
 import com.mdmoney.platform.JvmVaultStorage
@@ -13,9 +14,11 @@ import org.apache.pdfbox.pdmodel.PDPage
 import org.apache.pdfbox.pdmodel.PDPageContentStream
 import org.apache.pdfbox.pdmodel.font.PDType1Font
 import org.apache.pdfbox.pdmodel.font.Standard14Fonts
+import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.nio.file.Files
+import javax.imageio.ImageIO
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -181,5 +184,35 @@ class StatementImportFlowTest {
         }
         val lines = JvmImportPlatform.pdfPagesOf(bytes).single().lines().map { it.trim() }.filter { it.isNotEmpty() }
         assertEquals(listOf("25 AGO Oticas Exemplo 170,40", "26 AGO Mercado Bella 166,92"), lines)
+    }
+
+    /** One page per entry of [rows], each row drawn as a statement line. */
+    private fun statementPdf(vararg rows: String): ByteArray = PDDocument().use { doc ->
+        val font = PDType1Font(Standard14Fonts.FontName.HELVETICA)
+        rows.forEach { row ->
+            val page = PDPage().also { doc.addPage(it) }
+            PDPageContentStream(doc, page).use { cs ->
+                cs.beginText(); cs.setFont(font, 10f); cs.newLineAtOffset(40f, 700f); cs.showText(row); cs.endText()
+            }
+        }
+        ByteArrayOutputStream().also { doc.save(it) }.toByteArray()
+    }
+
+    @Test
+    fun each_line_remembers_the_page_it_was_printed_on() = runBlocking {
+        val bytes = statementPdf("25/08/2026 Mercado Bella 166,92", "27/08/2026 Oticas Exemplo 170,40")
+        val result = StatementExtractor(null, emptyList()).extract(JvmImportPlatform.pdfPagesOf(bytes), fallbackYear = 2026)
+        assertEquals(listOf("Mercado Bella" to 0, "Oticas Exemplo" to 1), result.transactions.map { it.description to it.page })
+    }
+
+    @Test
+    fun a_page_is_drawn_at_the_width_asked_for() {
+        val bytes = statementPdf("25/08/2026 Mercado Bella 166,92", "27/08/2026 Oticas Exemplo 170,40")
+        val image = ImageIO.read(ByteArrayInputStream(JvmImportPlatform.renderPageOf(bytes, 1, 400)))
+        assertEquals(400, image.width)
+        // A letter page is 612 × 792 points.
+        assertEquals(518, image.height)
+        val inked = (0 until image.width).any { x -> (0 until image.height).any { y -> image.getRGB(x, y) and 0xFFFFFF != 0xFFFFFF } }
+        assertTrue(inked, "the page's text is drawn, not a blank")
     }
 }

@@ -80,6 +80,8 @@ data class RawTransaction(
     val category: String? = null,
     /** Set when the model and the fixed rules disagree about this line (see [Doubt.READERS_DISAGREE]). */
     val disputed: Boolean = false,
+    /** The page (0-based) the line was printed on, when known. */
+    val page: Int? = null,
 )
 
 /** A statement line with its full date settled, ready for review. */
@@ -92,6 +94,8 @@ data class StatementTransaction(
     val category: String?,
     /** Why this line deserves a second look; such a line is shown but not ticked. Null when none. */
     val doubt: Doubt? = null,
+    /** The page (0-based) the line was printed on, so a review can open the PDF there; null when unknown. */
+    val page: Int? = null,
 ) {
     val verified: Boolean get() = doubt == null
 }

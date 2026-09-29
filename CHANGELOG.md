@@ -12,6 +12,25 @@ heading when you cut a release.
 
 ## [Unreleased]
 
+## [0.8.1] — 2026-09-29
+
+### Fixed
+
+- **The new/edit expense sheet offers the existing categories.** Its Category field only took
+  typed text; the vault's categories now sit beneath it as chips, as they already did when recording
+  a one-off purchase. Typing a new name still creates a category.
+
+## [0.8.0] — 2026-09-29
+
+### Added
+
+- **Check the amounts against the PDF when the totals disagree.** When a total the statement prints
+  doesn't match the lines read from it, the review screen offers "Review amounts". It opens the PDF
+  itself — pinch or Ctrl+wheel to zoom, drag to move around, arrows to change page — with one line at
+  a time in a bar below it, on the page that line was read from. If its amount is wrong, type the
+  right one; ✓ moves on to the next line, and the back button returns to the review list with every
+  correction kept. The totals in the bar are recomputed as you go, so you can see when they match.
+
 ## [0.7.0] — 2026-09-29
 
 ### Added

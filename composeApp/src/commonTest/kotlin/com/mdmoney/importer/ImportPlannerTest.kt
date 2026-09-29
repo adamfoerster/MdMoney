@@ -120,4 +120,54 @@ class ImportPlannerTest {
         assertFalse(ImportPlanner.currencyMismatch("USD", Currency.custom("US$")))
         assertFalse(ImportPlanner.currencyMismatch(null, Currency.BRL))
     }
+
+    private fun reconciliation(declaredDebits: Double?, declaredCredits: Double? = null) =
+        Reconciliation(debits = 100.0, credits = 20.0, declaredDebits = declaredDebits, declaredCredits = declaredCredits)
+
+    @Test
+    fun only_a_printed_total_that_disagrees_asks_for_a_review() {
+        assertTrue(ImportPlanner.needsAmountReview(reconciliation(100.1)))
+        assertTrue(ImportPlanner.needsAmountReview(reconciliation(100.0, declaredCredits = 25.0)))
+        assertFalse(ImportPlanner.needsAmountReview(reconciliation(100.0, declaredCredits = 20.0)))
+        assertFalse(ImportPlanner.needsAmountReview(reconciliation(null)), "a statement that prints no total can't disagree")
+    }
+
+    @Test
+    fun correcting_an_amount_retotals_the_statement() {
+        val header = StatementHeader(declaredDebits = 594.8)
+        val rows = ImportPlanner.initialRows(lines, emptyMap())
+        // Read: 50 + 12.9 + 500 + 10 + 10 = 582.90 (the unverified 9.99 doesn't count); printed: 594.80.
+        assertEquals(582.9, ImportPlanner.reconcile(rows, header).debits)
+        assertEquals(false, ImportPlanner.reconcile(rows, header).debitsMatch)
+
+        val fixed = ImportPlanner.withAmount(rows, id = 0, amount = 61.9, existing = emptyMap())
+        assertEquals(61.9, fixed[0].tx.amount)
+        assertEquals(594.8, ImportPlanner.reconcile(fixed, header).debits)
+        assertEquals(true, ImportPlanner.reconcile(fixed, header).debitsMatch)
+        assertEquals(rows.drop(1), fixed.drop(1), "the other rows are left as they were")
+    }
+
+    @Test
+    fun a_corrected_amount_is_kept_to_cents_and_must_be_positive() {
+        val rows = ImportPlanner.initialRows(lines, emptyMap())
+        assertEquals(61.9, ImportPlanner.withAmount(rows, 0, 61.899999, emptyMap())[0].tx.amount)
+        assertEquals(rows, ImportPlanner.withAmount(rows, 0, 0.0, emptyMap()))
+        assertEquals(rows, ImportPlanner.withAmount(rows, 0, -5.0, emptyMap()))
+    }
+
+    @Test
+    fun a_corrected_amount_can_turn_out_to_be_already_imported() {
+        val rows = ImportPlanner.initialRows(lines, mapOf(EntryKey.of(LedgerEntry("20260801", "Mercado", 55.0)) to 1))
+        assertFalse(rows[0].alreadyImported, "50.00 isn't in the vault")
+        val fixed = ImportPlanner.withAmount(rows, 0, 55.0, mapOf(EntryKey.of(LedgerEntry("20260801", "Mercado", 55.0)) to 1))
+        assertTrue(fixed[0].alreadyImported, "but 55.00 is")
+        assertFalse(fixed[0].selected)
+    }
+
+    @Test
+    fun the_review_walks_every_row_then_stops() {
+        assertEquals(1, ImportPlanner.nextReview(0, 3))
+        assertEquals(2, ImportPlanner.nextReview(1, 3))
+        assertEquals(null, ImportPlanner.nextReview(2, 3))
+    }
 }

@@ -67,9 +67,16 @@ fun ImportScreen(model: AppModel, importer: StatementImportModel, app: UiState) 
     val s = LocalStrings.current
     val reino = LocalReinoColors.current
     val state by importer.state.collectAsState()
+    // Held above the review screen, so coming back from it lands where the list was left.
+    val scroll = rememberScrollState()
+
+    (state.phase as? ImportPhase.Review)?.takeIf { it.reviewing != null }?.let {
+        AmountReviewScreen(importer, state, it)
+        return
+    }
 
     Surface(Modifier.fillMaxSize()) {
-        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp)) {
+        Column(Modifier.fillMaxSize().verticalScroll(scroll).padding(horizontal = 24.dp)) {
             Spacer(Modifier.height(16.dp))
             ReinoButton("‹ ${s.home}", onClick = { model.closeImport() }, variant = ReinoButtonVariant.Ghost)
             Text(
@@ -205,6 +212,11 @@ private fun ReviewPhase(importer: StatementImportModel, state: ImportUiState, ph
 
     Spacer(Modifier.height(16.dp))
     ReconciliationLines(result.reconciliation)
+    if (ImportPlanner.needsAmountReview(result.reconciliation) && state.rows.isNotEmpty()) {
+        Text(s.reviewAmountsHint, style = MaterialTheme.typography.bodySmall, color = reino.brassDeep, modifier = Modifier.padding(top = 8.dp))
+        Spacer(Modifier.height(8.dp))
+        ReinoButton(s.reviewAmounts, onClick = { importer.openAmountReview() }, variant = ReinoButtonVariant.Secondary, trailingArrow = true)
+    }
 
     if (result.transactions.isEmpty()) {
         Text(s.nothingFound, style = MaterialTheme.typography.bodyLarge, color = reino.inkSoft, modifier = Modifier.padding(vertical = 20.dp))
@@ -237,7 +249,7 @@ private fun ReviewPhase(importer: StatementImportModel, state: ImportUiState, ph
 
 /** The extracted totals next to what the statement prints, so a missed or invented line shows. */
 @Composable
-private fun ReconciliationLines(r: Reconciliation) {
+internal fun ReconciliationLines(r: Reconciliation) {
     val s = LocalStrings.current
     val sep = LocalDecimalSeparator.current
     val reino = LocalReinoColors.current
@@ -350,7 +362,7 @@ private fun GroupPicker(selected: GroupChoice?, groups: List<GroupChoice>, onPic
     }
 }
 
-private fun dateText(d: SimpleDate): String =
+internal fun dateText(d: SimpleDate): String =
     "${d.day.toString().padStart(2, '0')}/${d.month.toString().padStart(2, '0')}/${d.year}"
 
 internal fun percent(done: Long, total: Long): Int =

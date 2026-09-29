@@ -88,6 +88,18 @@ fun EditExpenseSheet(model: AppModel, editor: EditorState, categories: List<Cate
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
             )
+            // As in the one-off sheet: pick an existing category, or type a new one.
+            if (categories.isNotEmpty()) {
+                Row(Modifier.chipRowScroll(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    categories.forEach { c ->
+                        FilterChip(
+                            selected = category.trim().equals(c.title, ignoreCase = true),
+                            onClick = { category = c.title },
+                            label = { Text(c.title) },
+                        )
+                    }
+                }
+            }
 
             Text(s.typeLabel, style = androidx.compose.material3.MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 10.dp, bottom = 4.dp))
             Row(Modifier.chipRowScroll(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {

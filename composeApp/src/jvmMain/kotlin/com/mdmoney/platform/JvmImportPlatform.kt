@@ -7,8 +7,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.swing.Swing
 import kotlinx.coroutines.withContext
 import org.apache.pdfbox.Loader
+import org.apache.pdfbox.rendering.ImageType
+import org.apache.pdfbox.rendering.PDFRenderer
 import org.apache.pdfbox.text.PDFTextStripper
+import java.io.ByteArrayOutputStream
 import java.io.File
+import javax.imageio.ImageIO
 import javax.swing.JFileChooser
 import javax.swing.filechooser.FileNameExtensionFilter
 
@@ -30,6 +34,10 @@ class JvmImportPlatform(
 
     override suspend fun pdfPages(bytes: ByteArray): List<String> = withContext(Dispatchers.IO) {
         pdfPagesOf(bytes)
+    }
+
+    override suspend fun renderPdfPage(bytes: ByteArray, page: Int, widthPx: Int): ByteArray = withContext(Dispatchers.IO) {
+        renderPageOf(bytes, page, widthPx)
     }
 
     override fun modelPath(fileName: String): String = File(modelsDir, fileName).absolutePath
@@ -78,6 +86,16 @@ class JvmImportPlatform(
                 stripper.endPage = page
                 stripper.getText(doc)
             }
+        }
+
+        /** Page [page] (0-based) drawn [widthPx] wide on white, as PNG. */
+        fun renderPageOf(bytes: ByteArray, page: Int, widthPx: Int): ByteArray = Loader.loadPDF(bytes).use { doc ->
+            val p = doc.getPage(page)
+            // A page turned sideways is drawn turned, so its printed height becomes the width.
+            val width = if (p.rotation % 180 != 0) p.cropBox.height else p.cropBox.width
+            // Half a pixel over, since the renderer floors the size and 400 / 612 * 612 lands at 399.99.
+            val image = PDFRenderer(doc).renderImage(page, (widthPx + 0.5f) / width, ImageType.RGB)
+            ByteArrayOutputStream().also { ImageIO.write(image, "png", it) }.toByteArray()
         }
     }
 }

@@ -129,6 +129,7 @@ class StatementExtractor(
                     !withinPeriod(date, header.period) -> Doubt.DATE_OUTSIDE_PERIOD
                     else -> null
                 },
+                page = raw.page,
             )
         }
 

@@ -1,7 +1,11 @@
 package com.mdmoney.platform
 
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.Color
+import android.graphics.pdf.PdfRenderer
 import android.net.Uri
+import android.os.ParcelFileDescriptor
 import android.provider.OpenableColumns
 import com.mdmoney.importer.ImportPlatform
 import com.mdmoney.importer.LocalLlm
@@ -11,6 +15,7 @@ import com.tom_roush.pdfbox.pdmodel.PDDocument
 import com.tom_roush.pdfbox.text.PDFTextStripper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.io.ByteArrayOutputStream
 import java.io.File
 
 /** Bridges the system document picker (an Activity result) into a suspend call. */
@@ -54,6 +59,28 @@ class AndroidImportPlatform(
                 stripper.endPage = page
                 stripper.getText(doc)
             }
+        }
+    }
+
+    /** The system's own PDF renderer, which reads from a file descriptor — hence the brief cache file. */
+    override suspend fun renderPdfPage(bytes: ByteArray, page: Int, widthPx: Int): ByteArray = withContext(Dispatchers.IO) {
+        val file = File.createTempFile("statement", ".pdf", context.cacheDir)
+        try {
+            file.writeBytes(bytes)
+            ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY).use { fd ->
+                PdfRenderer(fd).use { renderer ->
+                    renderer.openPage(page).use { p ->
+                        val bitmap = Bitmap.createBitmap(widthPx, (widthPx.toLong() * p.height / p.width).toInt(), Bitmap.Config.ARGB_8888)
+                        // The renderer leaves the paper transparent.
+                        bitmap.eraseColor(Color.WHITE)
+                        p.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+                        ByteArrayOutputStream().also { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }.toByteArray()
+                            .also { bitmap.recycle() }
+                    }
+                }
+            }
+        } finally {
+            file.delete()
         }
     }
 

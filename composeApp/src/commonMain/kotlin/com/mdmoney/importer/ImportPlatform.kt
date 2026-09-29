@@ -17,6 +17,12 @@ interface ImportPlatform {
     /** The text of each page, in order, with a line per printed line where the reader can tell. */
     suspend fun pdfPages(bytes: ByteArray): List<String>
 
+    /**
+     * Page [page] (0-based) of the PDF drawn [widthPx] pixels wide, as PNG bytes, for checking the
+     * read lines against the page itself. Null where this platform can't draw a PDF.
+     */
+    suspend fun renderPdfPage(bytes: ByteArray, page: Int, widthPx: Int): ByteArray? = null
+
     /** Where a model named [fileName] is (or would be) stored. */
     fun modelPath(fileName: String): String
 

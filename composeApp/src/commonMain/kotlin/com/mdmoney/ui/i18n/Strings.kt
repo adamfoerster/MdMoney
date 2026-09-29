@@ -116,6 +116,11 @@ interface Strings {
     val declaredTotal: String
     val totalsMatch: String
     val totalsDiffer: String
+    val reviewAmounts: String
+    val reviewAmountsHint: String
+    val confirmLine: String
+    val pdfUnavailable: String
+    fun reviewPosition(n: Int, total: Int): String
     val alreadyImported: String
     val selectAll: String
     val selectNone: String
