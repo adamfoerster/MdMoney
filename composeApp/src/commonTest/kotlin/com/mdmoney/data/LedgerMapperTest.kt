@@ -1,6 +1,7 @@
 package com.mdmoney.data
 
 import com.mdmoney.domain.Category
+import com.mdmoney.domain.ExpenseType
 import com.mdmoney.domain.Ledger
 import com.mdmoney.domain.LedgerEntry
 import com.mdmoney.domain.Month
@@ -240,5 +241,62 @@ class LedgerMapperTest {
         val reread = assertNotNull(LedgerMapper.read(l.id, "nubank", out, 2026))
         assertEquals(l.entries, reread.entries)
         assertEquals(Month.JUL, reread.month)
+    }
+
+    // An income ledger (imported statement credits), with keys and prose this app doesn't know.
+    private val incomeSample = """
+        ---
+        title: Entradas
+        type: income
+        account: "[[nubank|Nubank]]"
+        year: 2026
+        month: August
+        total: 254
+        reviewed: true
+        ---
+
+        Transferências recebidas.
+
+        | Date     | Note         | Amount |
+        | -------- | ------------ | ------ |
+        | 20260809 | Pix recebido | 150    |
+        | 20260809 | Pix recebido | 104    |
+    """.trimIndent() + "\n"
+
+    @Test
+    fun an_income_ledger_round_trips_byte_for_byte() {
+        val l = assertNotNull(LedgerMapper.read("2026 Aug - Entradas", "nubank", incomeSample, 2026))
+        assertTrue(l.income)
+        assertEquals(254.0, l.total, 0.001)
+        assertEquals(ExpenseType.INCOME, l.toExpense().type, "counted as money received, not spent")
+        assertEquals(incomeSample, LedgerMapper.write(incomeSample, l, links))
+    }
+
+    @Test
+    fun a_ledger_without_type_is_still_spending() {
+        val l = assertNotNull(LedgerMapper.read("x", "nubank", sample, 2026))
+        assertFalse(l.income)
+        assertEquals(ExpenseType.EVENTUAL, l.toExpense().type)
+        assertFalse(LedgerMapper.write(sample, l, links).contains("type:"), "a spending ledger gains no key")
+    }
+
+    @Test
+    fun a_new_income_ledger_says_so_beside_its_title() {
+        val l = Ledger(
+            id = "2026 Aug - Entradas",
+            account = "nubank",
+            title = "Entradas",
+            category = null,
+            year = 2026,
+            month = Month.AUG,
+            entries = listOf(LedgerEntry("20260809", "Pix recebido", 104.0)),
+            income = true,
+        )
+        val out = LedgerMapper.write(null, l, links)
+        assertTrue(out.startsWith("---\ntitle: Entradas\ntype: income\n"), out)
+        assertTrue(assertNotNull(LedgerMapper.read(l.id, "nubank", out, 2026)).income)
+
+        // Turned back into spending, the key goes rather than lingering as a lie.
+        assertFalse(LedgerMapper.write(out, l.copy(income = false), links).contains("type:"))
     }
 }

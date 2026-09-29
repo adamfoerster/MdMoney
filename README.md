@@ -115,6 +115,10 @@ initial-2026: 1200
 `title:` is what the `account:` links display; the folder name remains the account's identity, which
 is why the two are free to differ in casing.
 
+A ledger of money **received** — what statement import writes for credits — adds `type: income`
+beside its title and counts as income instead of spending. Without `type:` a ledger is spending, as
+it always was.
+
 The Home screen shows the account **balance = opening balance + income received − everything paid**
 for the year (a checkbook: only settled months move the figure), and can set the opening balance in
 place.
@@ -213,7 +217,41 @@ python3 scripts/import_regions.py /path/to/PalmBayHouse.xlsx /path/to/your/vault
 It writes `<vault>/Regions/<title> - <year>.md` in the schema above and never overwrites existing
 files. Requires `openpyxl` (`pip3 install --user openpyxl`).
 
-## Importing a bank statement
+## Importing a bank statement PDF (in the app)
+
+**Home › Import statement** reads a bank statement or credit-card bill PDF into the open account:
+
+1. The PDF's text is extracted per page (PDFBox on desktop and Android, PDFKit on iOS), sorted by
+   position so a row's date, description and amount stay on one line.
+2. Every line is taken apart deterministically (`StatementLines`): the amount it ends in, its date
+   or the dated heading above it, the section it sits in, and the description left over.
+3. A small language model running **on the device** (llama.cpp; Qwen2.5 1.5B or 3B, downloaded once
+   from Settings › Statement import) sees each page with its amount lines numbered and answers, per
+   line, whether it is a transaction plus its direction, kind and category. A GBNF grammar
+   (`importer/StatementGrammar.kt`) fixes exactly one answer per numbered line and restricts `cat` to
+   the vault's category slugs; the model writes no amounts, and a date only for a line that has none.
+4. Fixed rules (`HeuristicStatementParser`) vote on the same lines. Agreement → the line is kept (the
+   direction a sign or section prints beats the model's); disagreement → it is shown unticked and
+   marked. Without a model the rules alone decide.
+5. The period and currency are read from the text, a date printed without a year (`25 AGO`,
+   `08/24`) takes it from the period, and the confident lines' totals are reconciled with what the
+   statement prints.
+6. You review, then ticked lines are written as ledger rows — spending into `<year> <Mon> -
+   <category>.md`, credits into an income ledger — skipping any line the account already holds.
+
+Models are stored in the app's own folder (`~/.mdmoney/models` on desktop), never in the vault. To
+measure extraction on real statements without committing them:
+
+```
+./gradlew :composeApp:evalStatements -Pdir=/path/to/pdfs [-Pmodel=/path/to/model.gguf] [-Ptext]
+```
+
+Platform notes: Android ships the engine for arm64 only and needs the NDK (`ndkVersion` in
+`composeApp/build.gradle.kts`) installed at build time for its C++ runtime libraries — without it the
+APK builds without the engine. iOS links llama.cpp's official xcframework (downloaded and
+checksum-verified by the build), which has no simulator slice, so the simulator uses the line parser.
+
+## Importing a bank statement spreadsheet (script)
 
 Turns a statement (`Date | Description | Category | Valor`) into **ledger notes** — one per month and
 category, matching what the app writes:

@@ -18,6 +18,7 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import com.mdmoney.data.AppSettings
 import com.mdmoney.data.VaultStorage
+import com.mdmoney.importer.ImportPlatform
 import com.mdmoney.ui.AppModel
 import com.mdmoney.ui.HomeTab
 import com.mdmoney.ui.MdMoneyTheme
@@ -30,6 +31,7 @@ import com.mdmoney.ui.screens.AccountGridScreen
 import com.mdmoney.ui.screens.AccountsScreen
 import com.mdmoney.ui.screens.EditExpenseSheet
 import com.mdmoney.ui.screens.HomeScreen
+import com.mdmoney.ui.screens.ImportScreen
 import com.mdmoney.ui.screens.LedgerSheet
 import com.mdmoney.ui.screens.OneOffSheet
 import com.mdmoney.ui.screens.ReportsScreen
@@ -49,9 +51,15 @@ val LocalDecimalSeparator = staticCompositionLocalOf { '.' }
 val LocalCurrencySymbol = staticCompositionLocalOf { "" }
 
 @Composable
-fun App(storage: VaultStorage, settings: AppSettings, dbPath: String, initialAccount: String? = null) {
+fun App(
+    storage: VaultStorage,
+    settings: AppSettings,
+    dbPath: String,
+    initialAccount: String? = null,
+    importPlatform: ImportPlatform? = null,
+) {
     val scope = rememberCoroutineScope()
-    val model = remember { AppModel(storage, settings, scope, dbPath, initialAccount) }
+    val model = remember { AppModel(storage, settings, scope, dbPath, initialAccount, importPlatform) }
     val state by model.state.collectAsState()
 
     MdMoneyTheme {
@@ -67,6 +75,7 @@ fun App(storage: VaultStorage, settings: AppSettings, dbPath: String, initialAcc
                         Screen.Setup -> SetupScreen(model, state)
                         Screen.Settings -> SettingsScreen(model, state)
                         Screen.Accounts -> AccountsScreen(model, state)
+                        Screen.Import -> model.statementImport?.let { ImportScreen(model, it, state) }
                         Screen.AccountShell -> Column(Modifier.fillMaxSize()) {
                             Box(Modifier.weight(1f).fillMaxWidth()) {
                                 when (state.tab) {

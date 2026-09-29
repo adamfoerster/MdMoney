@@ -26,6 +26,10 @@ data class LedgerEntry(
  * Individual one-offs (each coffee) would otherwise each become their own file; they are rows in
  * [entries] instead, and the note's `total` is their sum. Money here is already spent by
  * definition — you record the purchase after making it — so it always counts against the balance.
+ *
+ * An [income] ledger is the same table for money that came *in* (imported statement credits: a
+ * transfer received, a refund). On disk it carries `type: income`; a note without `type:` is
+ * spending, so every ledger written before this existed reads exactly as it did.
  */
 data class Ledger(
     val id: String,
@@ -35,6 +39,7 @@ data class Ledger(
     val year: Int,
     val month: Month,
     val entries: List<LedgerEntry>,
+    val income: Boolean = false,
 ) {
     val total: Double get() = entries.sumOf { it.amount }
 
@@ -43,7 +48,8 @@ data class Ledger(
 
     /**
      * How the ledger appears everywhere expenses are listed or summed: a one-off landing in its own
-     * month, already paid — the money left the account when the purchase was made.
+     * month, already paid — the money left the account when the purchase was made (or, for an
+     * [income] ledger, already received).
      */
     fun toExpense(): Expense = Expense(
         id = id,
@@ -51,7 +57,7 @@ data class Ledger(
         title = title,
         category = category,
         year = year,
-        type = ExpenseType.EVENTUAL,
+        type = if (income) ExpenseType.INCOME else ExpenseType.EVENTUAL,
         period = null,
         subStatus = null,
         projected = null,

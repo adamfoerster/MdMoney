@@ -1,0 +1,4 @@
+# llama.cpp's C API, from the xcframework that downloadLlamaXcframework unpacks (device slice only).
+language = C
+modules = llama
+package = llama

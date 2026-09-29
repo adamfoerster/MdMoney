@@ -13,6 +13,7 @@ import com.mdmoney.domain.ExpenseType
 import com.mdmoney.domain.Ledger
 import com.mdmoney.domain.LedgerEntry
 import com.mdmoney.domain.Month
+import com.mdmoney.importer.ImportPlatform
 import com.mdmoney.platform.currentDay
 import com.mdmoney.platform.currentMonth
 import com.mdmoney.platform.currentYear
@@ -33,6 +34,9 @@ sealed interface Screen {
 
     /** The tabbed shell shown once an account is open (Home / Annual / Reports / Settings). */
     data object AccountShell : Screen
+
+    /** Reading a bank statement or card bill PDF into the open account. */
+    data object Import : Screen
 }
 
 /** Bottom-navigation destinations inside an open account. */
@@ -93,6 +97,8 @@ data class UiState(
     val currency: Currency = Currency.NONE,
     /** The category being read on the Reports tab; null is the list of all of them. */
     val openCategory: String? = null,
+    /** False when the platform offers no statement import. */
+    val canImport: Boolean = false,
 )
 
 /**
@@ -108,6 +114,7 @@ class AppModel(
     private val scope: CoroutineScope,
     dbPath: String,
     private val initialAccount: String? = null,
+    importPlatform: ImportPlatform? = null,
 ) {
     private val repo = VaultRepository(storage, CacheDb(dbPath))
 
@@ -127,9 +134,22 @@ class AppModel(
             screen = if (storage.hasVault()) Screen.Accounts else Screen.Setup,
             year = thisYear,
             homeMonth = thisMonth,
+            canImport = importPlatform != null,
         )
     )
     val state: StateFlow<UiState> = _state.asStateFlow()
+
+    /** Statement import, where the platform provides one. */
+    val statementImport: StatementImportModel? = importPlatform?.let { platform ->
+        StatementImportModel(
+            platform = platform,
+            settings = settings,
+            repo = repo,
+            scope = scope,
+            fallbackYear = { thisYear },
+            onImported = { account -> if (account == _state.value.selectedAccount) refreshFromCache(account) },
+        )
+    }
 
     init {
         if (storage.hasVault()) scope.launch {
@@ -156,6 +176,20 @@ class AppModel(
         it.copy(screen = Screen.Accounts, selectedAccount = null, editor = null, openCategory = null)
     }
 
+    /** Opens statement import for the open account. */
+    fun openImport() {
+        val account = _state.value.selectedAccount ?: return
+        val importer = statementImport ?: return
+        importer.start(account)
+        _state.update { it.copy(screen = Screen.Import) }
+    }
+
+    /** Leaves statement import, stopping any reading still under way. */
+    fun closeImport() {
+        statementImport?.cancel()
+        _state.update { it.copy(screen = Screen.AccountShell) }
+    }
+
     // --- Reports ---
 
     /** Opens one category's year: everything filed under it, and what it cost month by month. */
@@ -167,6 +201,7 @@ class AppModel(
         val target = when (it.screen) {
             Screen.Settings -> if (it.hasVault) Screen.Accounts else Screen.Setup
             Screen.AccountShell -> Screen.Accounts
+            Screen.Import -> Screen.AccountShell
             else -> it.screen
         }
         it.copy(screen = target, editor = null)

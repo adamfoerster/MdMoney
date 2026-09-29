@@ -2,12 +2,15 @@ package com.mdmoney
 
 import androidx.compose.ui.window.ComposeUIViewController
 import com.mdmoney.platform.IosAppSettings
+import com.mdmoney.platform.IosImportPlatform
 import com.mdmoney.platform.IosVaultStorage
 import platform.Foundation.NSDocumentDirectory
 import platform.Foundation.NSSearchPathForDirectoriesInDomains
 import platform.Foundation.NSTemporaryDirectory
 import platform.Foundation.NSUserDefaults
 import platform.Foundation.NSUserDomainMask
+
+private val importPlatform = IosImportPlatform()
 
 fun MainViewController() = ComposeUIViewController {
     val initialAccount = NSUserDefaults.standardUserDefaults.stringForKey("start.account")
@@ -19,5 +22,6 @@ fun MainViewController() = ComposeUIViewController {
         settings = IosAppSettings(),
         dbPath = dbPath,
         initialAccount = initialAccount,
+        importPlatform = importPlatform,
     )
 }

@@ -2,6 +2,8 @@ package com.mdmoney.ui.i18n
 
 import com.mdmoney.domain.ExpenseType
 import com.mdmoney.domain.Month
+import com.mdmoney.importer.Doubt
+import com.mdmoney.importer.TxKind
 
 /** Supported UI languages. [code] is the two-letter ISO code matched against the system language. */
 enum class Language(val code: String, val displayName: String) {
@@ -98,6 +100,51 @@ interface Strings {
     val currencyCustom: String
     val currencySymbolLabel: String
     val editAccount: String
+    val importStatement: String
+    val importIntro: String
+    val choosePdf: String
+    val readingPdf: String
+    val loadingModel: String
+    val simpleModeNotice: String
+    val modelFailedToRun: String
+    val modelMissingNotice: String
+    val importAccount: String
+    val statementPeriod: String
+    val extractedDebits: String
+    val extractedCredits: String
+    val declaredTotal: String
+    val totalsMatch: String
+    val totalsDiffer: String
+    val alreadyImported: String
+    val selectAll: String
+    val selectNone: String
+    val importAnother: String
+    val importFailed: String
+    val nothingFound: String
+    val importedExpenseTitle: String
+    val importedIncomeTitle: String
+    val importModelSection: String
+    val importModelHint: String
+    val modelLight: String
+    val modelAccurate: String
+    val modelCustom: String
+    val chooseModelFile: String
+    val downloadModel: String
+    val cancelDownload: String
+    val removeModel: String
+    val modelReady: String
+    val modelMissing: String
+    val modelVerifying: String
+    val modelFailed: String
+    val modelUnsupported: String
+    fun pageProgress(done: Int, total: Int): String
+    fun readingTime(elapsed: String, remainingMinutes: Long?): String
+    fun importSelected(count: Int): String
+    fun importDone(added: Int, skipped: Int, notes: Int): String
+    fun currencyMismatch(statement: String, account: String): String
+    fun modelDownloading(percent: Int): String
+    fun kindName(kind: TxKind): String
+    fun doubtText(doubt: Doubt): String
     fun typeName(type: ExpenseType): String
     fun month(m: Month): String
     fun monthShort(m: Month): String

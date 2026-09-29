@@ -6,6 +6,10 @@ import com.mdmoney.domain.Expense
 import com.mdmoney.domain.Ledger
 import com.mdmoney.domain.LedgerEntry
 import com.mdmoney.domain.Month
+import com.mdmoney.importer.EntryKey
+import com.mdmoney.importer.ImportDedup
+import com.mdmoney.importer.ImportEntry
+import com.mdmoney.importer.ImportResult
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
@@ -100,6 +104,58 @@ class VaultRepository(
         storage.write(account, "$id.md", LedgerMapper.write(existingContent, ledger, links))
         cache.upsertAll(listOf(ledger.toExpense()))
         return ledger
+    }
+
+    /**
+     * Writes reviewed statement lines into their ledger notes — one read-modify-write per note, not
+     * per line — skipping every line the vault already holds (see [ImportDedup]), so importing the
+     * same statement twice adds nothing the second time.
+     */
+    suspend fun importEntries(account: String, entries: List<ImportEntry>): ImportResult {
+        ensureCategories(entries.mapNotNull { it.category })
+        return fileLock.withLock {
+            val months = entries.map { it.year to it.month }.toSet()
+            val present = ImportDedup.alreadyPresent(
+                entries.map { EntryKey.of(it.entry) },
+                ImportDedup.count(ledgersIn(account, months).flatMap { it.entries }),
+            )
+            val fresh = entries.filterIndexed { i, _ -> !present[i] }
+            val groups = fresh.groupBy { Ledger.idFor(it.year, it.month, it.title) }
+            for ((id, group) in groups) {
+                val first = group.first()
+                val existingContent = runCatching { storage.read(account, "$id.md") }.getOrNull()
+                val existing = existingContent?.let { LedgerMapper.read(id, account, it, first.year) }
+                val ledger = (
+                    existing ?: Ledger(
+                        id = id,
+                        account = account,
+                        title = Ledger.sanitizeTitle(first.title),
+                        category = first.category,
+                        year = first.year,
+                        month = first.month,
+                        entries = emptyList(),
+                        income = first.income,
+                    )
+                    ).let { it.copy(entries = it.entries + group.map { e -> e.entry }) }
+                storage.write(account, "$id.md", LedgerMapper.write(existingContent, ledger, links))
+                cache.upsertAll(listOf(ledger.toExpense()))
+            }
+            ImportResult(added = fresh.size, skipped = entries.size - fresh.size, notes = groups.size)
+        }
+    }
+
+    /** How many times each row already sits in any of the account's ledgers for [months]. */
+    suspend fun existingEntryCounts(account: String, months: Set<Pair<Int, Month>>): Map<EntryKey, Int> =
+        ImportDedup.count(ledgersIn(account, months).flatMap { it.entries })
+
+    private suspend fun ledgersIn(account: String, months: Set<Pair<Int, Month>>): List<Ledger> {
+        if (months.isEmpty()) return emptyList()
+        val files = runCatching { storage.listNotes(account) }.getOrDefault(emptyList())
+        return files.mapNotNull { file ->
+            val content = runCatching { storage.read(account, file) }.getOrNull() ?: return@mapNotNull null
+            LedgerMapper.read(file.removeSuffix(".md"), account, content, months.first().first)
+                ?.takeIf { (it.year to it.month) in months }
+        }
     }
 
     /** Rewrites a ledger's rows (used when removing an entry); the total follows automatically. */

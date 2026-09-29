@@ -28,6 +28,12 @@ import com.mdmoney.ui.components.ReinoButton
 import com.mdmoney.ui.components.ReinoButtonVariant
 import com.mdmoney.ui.i18n.Language
 import com.mdmoney.AppVersion
+import com.mdmoney.importer.ImportModelPreset
+import com.mdmoney.ui.ModelStatus
+import com.mdmoney.ui.StatementImportModel
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import com.mdmoney.ui.theme.LocalReinoColors
 
 @Composable
@@ -72,6 +78,13 @@ fun SettingsScreen(model: AppModel, state: UiState) {
             HairlineDivider()
             Spacer(Modifier.height(24.dp))
 
+            model.statementImport?.let { importer ->
+                ImportModelSettings(importer)
+                Spacer(Modifier.height(24.dp))
+                HairlineDivider()
+                Spacer(Modifier.height(24.dp))
+            }
+
             Eyebrow(s.changeVault)
             Text(
                 state.vaultLabel ?: s.vaultNotSelected,
@@ -92,6 +105,73 @@ fun SettingsScreen(model: AppModel, state: UiState) {
             )
         }
     }
+}
+
+/** Choosing, downloading and removing the statement-import model. */
+@Composable
+private fun ImportModelSettings(importer: StatementImportModel) {
+    val s = LocalStrings.current
+    val reino = LocalReinoColors.current
+    val state by importer.state.collectAsState()
+    val status = state.modelStatus
+
+    Eyebrow(s.importModelSection)
+    Text(
+        s.importModelHint,
+        style = MaterialTheme.typography.bodySmall,
+        color = reino.inkSoft,
+        modifier = Modifier.padding(top = 8.dp, bottom = 4.dp),
+    )
+    if (status == ModelStatus.Unsupported) {
+        Text(s.modelUnsupported, style = MaterialTheme.typography.bodyMedium, color = reino.brassDeep)
+        return
+    }
+    OptionRow("${s.modelLight} · ${gigabytes(ImportModelPreset.LIGHT.sizeBytes)}", state.model.preset == ImportModelPreset.LIGHT) {
+        importer.choosePreset(ImportModelPreset.LIGHT)
+    }
+    OptionRow("${s.modelAccurate} · ${gigabytes(ImportModelPreset.ACCURATE.sizeBytes)}", state.model.preset == ImportModelPreset.ACCURATE) {
+        importer.choosePreset(ImportModelPreset.ACCURATE)
+    }
+    state.model.customPath?.let { path ->
+        OptionRow("${s.modelCustom}: ${path.substringAfterLast('/').substringAfterLast('\\')}", true) {}
+    }
+    Text(
+        when (status) {
+            ModelStatus.Ready -> s.modelReady
+            ModelStatus.Missing -> s.modelMissing
+            ModelStatus.Verifying -> s.modelVerifying
+            is ModelStatus.Downloading -> s.modelDownloading(percent(status.done, status.total))
+            is ModelStatus.Failed -> "${s.modelFailed} (${status.reason})"
+            ModelStatus.Unsupported -> s.modelUnsupported
+        },
+        style = MaterialTheme.typography.labelMedium,
+        color = if (status is ModelStatus.Failed) reino.brassDeep else reino.inkSoft,
+        modifier = Modifier.padding(vertical = 8.dp),
+    )
+    if (status is ModelStatus.Downloading) {
+        LinearProgressIndicator(
+            progress = { if (status.total > 0) status.done.toFloat() / status.total else 0f },
+            modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+            color = reino.brass,
+        )
+        ReinoButton(s.cancelDownload, onClick = { importer.cancelDownload() }, variant = ReinoButtonVariant.Secondary)
+    } else if (state.model.preset != null) {
+        if (status == ModelStatus.Ready) {
+            ReinoButton(s.removeModel, onClick = { importer.removeModel() }, variant = ReinoButtonVariant.Secondary)
+        } else if (status != ModelStatus.Verifying) {
+            ReinoButton(s.downloadModel, onClick = { importer.downloadModel() }, trailingArrow = true)
+        }
+    }
+    if (importer.canPickModelFile) {
+        Spacer(Modifier.height(8.dp))
+        ReinoButton(s.chooseModelFile, onClick = { importer.chooseModelFile() }, variant = ReinoButtonVariant.Ghost)
+    }
+}
+
+/** `1117320736` -> `1.1 GB`: sizes the user weighs before a download, not exact byte counts. */
+internal fun gigabytes(bytes: Long): String {
+    val tenths = (bytes + 50_000_000) / 100_000_000
+    return "${tenths / 10}.${tenths % 10} GB"
 }
 
 @Composable

@@ -36,6 +36,8 @@ class LedgerEntryEditTest {
         override fun setLanguage(code: String?) {}
         override fun decimalSeparator(): String? = null
         override fun setDecimalSeparator(code: String?) {}
+        override fun importModel(): String? = null
+        override fun setImportModel(value: String?) {}
     }
 
     @AfterTest

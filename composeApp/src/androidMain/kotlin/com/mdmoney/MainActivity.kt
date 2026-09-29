@@ -7,6 +7,8 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import com.mdmoney.platform.AndroidAppSettings
+import com.mdmoney.platform.AndroidImportPlatform
+import com.mdmoney.platform.DocumentPicker
 import com.mdmoney.platform.AndroidVaultStorage
 import com.mdmoney.platform.TreePicker
 import kotlinx.coroutines.CancellableContinuation
@@ -29,6 +31,20 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    // The same bridge for picking a single document (a statement PDF).
+    private var pendingDocument: CancellableContinuation<Uri?>? = null
+    private val openDocument = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        pendingDocument?.let { if (it.isActive) it.resume(uri) }
+        pendingDocument = null
+    }
+
+    private val documentPicker = DocumentPicker { mimeType ->
+        suspendCancellableCoroutine { cont ->
+            pendingDocument = cont
+            openDocument.launch(arrayOf(mimeType))
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
@@ -36,8 +52,9 @@ class MainActivity : ComponentActivity() {
         val settings = AndroidAppSettings(applicationContext)
         val dbPath = applicationContext.getDatabasePath("mdmoney-cache.db")
             .also { it.parentFile?.mkdirs() }.absolutePath
+        val importPlatform = AndroidImportPlatform(applicationContext, documentPicker)
         setContent {
-            App(storage, settings, dbPath)
+            App(storage, settings, dbPath, importPlatform = importPlatform)
         }
     }
 }

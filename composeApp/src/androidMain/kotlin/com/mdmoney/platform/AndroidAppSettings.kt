@@ -23,8 +23,18 @@ class AndroidAppSettings(context: Context) : AppSettings {
         }.apply()
     }
 
+    override fun importModel(): String? =
+        prefs.getString(KEY_IMPORT_MODEL, null)?.takeIf { it.isNotBlank() }
+
+    override fun setImportModel(value: String?) {
+        prefs.edit().apply {
+            if (value == null) remove(KEY_IMPORT_MODEL) else putString(KEY_IMPORT_MODEL, value)
+        }.apply()
+    }
+
     private companion object {
         const val KEY_LANG = "language"
         const val KEY_DECIMAL = "decimalSeparator"
+        const val KEY_IMPORT_MODEL = "importModel"
     }
 }

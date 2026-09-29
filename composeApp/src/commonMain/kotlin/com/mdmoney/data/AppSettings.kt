@@ -11,4 +11,12 @@ interface AppSettings {
     fun decimalSeparator(): String?
 
     fun setDecimalSeparator(code: String?)
+
+    /**
+     * The statement-import model: a preset id (`ImportModelPreset.id`), or a path to a `.gguf` the
+     * user pointed at. Null means the default preset.
+     */
+    fun importModel(): String?
+
+    fun setImportModel(value: String?)
 }

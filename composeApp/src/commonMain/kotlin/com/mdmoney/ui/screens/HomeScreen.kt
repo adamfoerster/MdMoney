@@ -131,6 +131,15 @@ fun HomeScreen(model: AppModel, state: UiState) {
                     variant = ReinoButtonVariant.Secondary,
                     trailingArrow = true,
                 )
+                if (state.canImport) {
+                    Spacer(Modifier.height(10.dp))
+                    ReinoButton(
+                        s.importStatement,
+                        onClick = { model.openImport() },
+                        variant = ReinoButtonVariant.Secondary,
+                        trailingArrow = true,
+                    )
+                }
                 Spacer(Modifier.height(28.dp))
             }
         }

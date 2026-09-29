@@ -32,6 +32,8 @@ import com.mdmoney.domain.parseVaultLink
  * a single zero line in that month. A note that carries monthly amounts is an expense whatever else
  * it says; a real ledger keeps its money in the table, never in month keys.
  *
+ * A ledger of money received adds `type: income`; without it the table is spending.
+ *
  * Unknown frontmatter keys and any prose around the table are preserved; `total` is always
  * recomputed from the rows so the two can't drift apart.
  */
@@ -39,6 +41,8 @@ object LedgerMapper {
 
     private const val KEY_MONTH = "month"
     private const val KEY_TOTAL = "total"
+    private const val KEY_TYPE = "type"
+    private const val TYPE_INCOME = "income"
 
     /** True when [content] parses as a ledger rather than a plain expense note. */
     fun isLedger(content: String): Boolean = isLedger(FrontmatterParser.parse(content))
@@ -68,6 +72,7 @@ object LedgerMapper {
             year = note.scalar("year")?.toIntOrNull() ?: fallbackYear,
             month = month,
             entries = readTable(note.body),
+            income = note.scalar(KEY_TYPE) == TYPE_INCOME,
         )
     }
 
@@ -88,6 +93,12 @@ object LedgerMapper {
         note.setScalar("year", ledger.year.toString())
         note.setScalar(KEY_MONTH, ledger.month.english)
         note.setScalar(KEY_TOTAL, formatAmount(ledger.total))
+        // Only an income ledger says so; a spending one stays without `type:`, as it always was.
+        if (ledger.income) {
+            note.setScalar(KEY_TYPE, TYPE_INCOME, after = "title")
+        } else if (note.scalar(KEY_TYPE) == TYPE_INCOME) {
+            note.removeKey(KEY_TYPE)
+        }
 
         val rebuilt = MarkdownNote(note.entries, replaceTable(note.body, renderTable(ledger.sorted())))
         return FrontmatterParser.serialize(rebuilt)

@@ -12,6 +12,46 @@ heading when you cut a release.
 
 ## [Unreleased]
 
+## [0.6.0] — 2026-09-28
+
+### Added
+
+- **Import a bank statement or card bill straight from its PDF.** "Import statement" on Home picks a
+  PDF, reads every transaction out of it on the device, and lays them out for review before anything
+  is written: each line can be ticked, renamed and given a category, and the extracted totals are set
+  beside the ones the statement prints ("Out: 3,338.99 · statement says 3,338.99 — matches"), which is
+  how a missed or invented line shows. Spending and fees start ticked; money coming in, transfers and
+  card-bill payments start unticked, since they are often money moving between your own accounts.
+  Ticked lines land in the same ledger notes a one-off purchase does — one per month and category —
+  and importing the same statement again adds nothing: a line the account already holds is marked
+  "already imported", even if it was filed under another category since.
+- **A small AI model reads the statements, offline.** Settings › Statement import downloads a model
+  once (Light, 1.1 GB, or Accurate, 2.1 GB; checked against a pinned checksum) and llama.cpp runs it
+  on the device on desktop, Android (arm64) and iPhone — the statement never leaves the machine. The
+  model never writes an amount: every line that prints one is numbered, and the model only says,
+  line by line, whether it is a transaction, which way the money went, its kind and its category
+  (only among the vault's own categories) — a grammar fixes one answer per line, so it can't skip,
+  repeat or invent lines. Amounts, dates and descriptions are read from the PDF's text. Built-in
+  rules vote on every line too: where they and the model disagree, the line is shown unticked and
+  marked, so a layout the rules don't know still surfaces what the model found, and a misreading
+  costs a glance rather than a wrong entry. On desktop you can point it at a `.gguf` you already have.
+  If a downloaded model can't run, the review screen says why instead of quietly using the rules
+  alone. On Windows the engine's library lives in `~/.mdmoney/native` rather than the shared temp
+  folder, where a copy held by another process used to stop it loading.
+  Without a model (not downloaded, the iOS simulator, a non-arm64 Android device) a simple built-in
+  parser does the reading, and the review screen says so.
+- `./gradlew :composeApp:evalStatements -Pdir=<pdfs> [-Pmodel=<gguf>]` runs extraction over a folder
+  of real statements and prints every line with the reconciliation — for judging a prompt or model
+  change without putting personal statements in the repo.
+
+### Changed
+
+- **A ledger can now hold money received.** Imported credits go to a ledger note carrying
+  `type: income` (e.g. `2026 Aug - Received.md`), which counts towards the balance as income. A
+  ledger without `type:` is spending exactly as before, so existing vaults read unchanged — but an
+  older version of the app would read an income ledger as spending.
+- Android asks for the `INTERNET` permission, used only to download the model.
+
 ## [0.5.0] — 2026-09-25
 
 ### Added
