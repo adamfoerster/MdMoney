@@ -115,6 +115,13 @@ initial-2026: 1200
 `title:` is what the `account:` links display; the folder name remains the account's identity, which
 is why the two are free to differ in casing.
 
+Statement import can also file a line under an existing **plain** note (a recurring bill or an income
+line) instead of a ledger. The note stays a plain note: the line's amount is added to that month's
+value, the month is marked paid/received, and the line itself is appended to a `| Date | Note |
+Amount |` table in the body — the same table a ledger uses — so the purchases behind the number stay
+visible and a repeated import is recognised. Only a table with that exact header is rewritten; any
+other table in the note is left alone.
+
 A ledger of money **received** — what statement import writes for credits — adds `type: income`
 beside its title and counts as income instead of spending. Without `type:` a ledger is spending, as
 it always was.

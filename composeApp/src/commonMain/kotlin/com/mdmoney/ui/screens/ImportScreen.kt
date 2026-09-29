@@ -37,6 +37,7 @@ import com.mdmoney.data.formatMoney
 import com.mdmoney.domain.Category
 import com.mdmoney.domain.categoryTitle
 import com.mdmoney.importer.ExtractionResult
+import com.mdmoney.importer.GroupChoice
 import com.mdmoney.importer.ImportPlanner
 import com.mdmoney.importer.Reconciliation
 import com.mdmoney.importer.ReviewRow
@@ -218,7 +219,7 @@ private fun ReviewPhase(importer: StatementImportModel, state: ImportUiState, ph
     }
     HairlineDivider()
     state.rows.forEach { row ->
-        ReviewLine(row, app.categories, importer)
+        ReviewLine(row, app.categories, state.groups.forRow(row), importer)
         HairlineDivider()
     }
 
@@ -256,7 +257,7 @@ private fun ReconciliationLines(r: Reconciliation) {
 }
 
 @Composable
-private fun ReviewLine(row: ReviewRow, categories: List<Category>, importer: StatementImportModel) {
+private fun ReviewLine(row: ReviewRow, categories: List<Category>, groups: List<GroupChoice>, importer: StatementImportModel) {
     val s = LocalStrings.current
     val sep = LocalDecimalSeparator.current
     val reino = LocalReinoColors.current
@@ -285,7 +286,12 @@ private fun ReviewLine(row: ReviewRow, categories: List<Category>, importer: Sta
                 color = if (!row.tx.verified) reino.brassDeep else reino.inkFaint,
                 modifier = Modifier.padding(top = 2.dp),
             )
-            CategoryPicker(row.category, categories) { importer.setCategory(row.id, it) }
+            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                CategoryPicker(row.category, categories) { importer.setCategory(row.id, it) }
+                if (groups.isNotEmpty()) {
+                    GroupPicker(row.group, groups) { importer.setGroup(row.id, it) }
+                }
+            }
         }
         Text(
             (if (row.isIncome) "+" else "") + formatMoney(row.tx.amount, sep),
@@ -317,6 +323,28 @@ private fun CategoryPicker(selected: String?, categories: List<Category>, onPick
             DropdownMenuItem(text = { Text(s.uncategorized) }, onClick = { onPick(null); open = false })
             categories.forEach { c ->
                 DropdownMenuItem(text = { Text(c.title) }, onClick = { onPick(c.slug); open = false })
+            }
+        }
+    }
+}
+
+/** Files the line under a group the account already has, instead of the one its category implies. */
+@Composable
+private fun GroupPicker(selected: GroupChoice?, groups: List<GroupChoice>, onPick: (GroupChoice?) -> Unit) {
+    val s = LocalStrings.current
+    val reino = LocalReinoColors.current
+    var open by remember { mutableStateOf(false) }
+    Box {
+        Text(
+            "${s.groupLabel}: ${selected?.title ?: s.groupFollowsCategory} ▾",
+            style = MaterialTheme.typography.labelMedium,
+            color = reino.brass,
+            modifier = Modifier.clickable { open = true }.padding(vertical = 6.dp),
+        )
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            DropdownMenuItem(text = { Text(s.groupFollowsCategory) }, onClick = { onPick(null); open = false })
+            groups.forEach { g ->
+                DropdownMenuItem(text = { Text(g.title) }, onClick = { onPick(g); open = false })
             }
         }
     }

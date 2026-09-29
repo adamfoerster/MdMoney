@@ -104,6 +104,37 @@ object LedgerMapper {
         return FrontmatterParser.serialize(rebuilt)
     }
 
+    // --- rows inside a plain expense note ---
+
+    /** Every `| date | note | amount |` row in [content]'s body, whatever kind of note it is. */
+    fun tableEntries(content: String): List<LedgerEntry> = readTable(FrontmatterParser.parse(content).body)
+
+    /**
+     * Adds [added] to the Date | Note | Amount table in [content]'s body, for a plain expense note
+     * that keeps the purchases behind a month's amount. Only a table with exactly that header is
+     * rewritten; any other table the user keeps there is left alone and a new one is appended.
+     */
+    fun withAppendedRows(content: String, added: List<LedgerEntry>): String {
+        val note = FrontmatterParser.parse(content)
+        val lines = note.body.replace("\r\n", "\n").split("\n")
+        val first = lines.indexOfFirst { l ->
+            splitRow(l)?.map { it.lowercase() } == listOf(COL_DATE, COL_NOTE, COL_AMOUNT).map { it.lowercase() }
+        }
+        val body = if (first < 0) {
+            val prose = note.body.trimEnd('\n')
+            (if (prose.isBlank()) "\n" else "$prose\n\n") + renderTable(added.sortedByDescending { it.date })
+        } else {
+            var last = first
+            while (last + 1 < lines.size && splitRow(lines[last + 1]) != null) last++
+            val existing = readTable(lines.subList(first, last + 1).joinToString("\n"))
+            val table = renderTable((existing + added).sortedByDescending { it.date }).trimEnd('\n')
+            val before = if (first == 0) "" else lines.take(first).joinToString("\n") + "\n"
+            val after = lines.drop(last + 1).joinToString("\n")
+            before + table + (if (after.isEmpty()) "\n" else "\n$after")
+        }
+        return FrontmatterParser.serialize(MarkdownNote(note.entries, body))
+    }
+
     // --- table ---
 
     /** Reads `| date | note | amount |` rows, skipping the header and its `---` separator. */

@@ -12,6 +12,7 @@ import com.mdmoney.importer.ImportEntry
 import com.mdmoney.importer.ImportResult
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlin.math.round
 
 /**
  * Reads and writes [Expense] items through a [VaultStorage], with a [CacheDb] in front for fast
@@ -117,10 +118,31 @@ class VaultRepository(
             val months = entries.map { it.year to it.month }.toSet()
             val present = ImportDedup.alreadyPresent(
                 entries.map { EntryKey.of(it.entry) },
-                ImportDedup.count(ledgersIn(account, months).flatMap { it.entries }),
+                ImportDedup.count(entriesIn(account, months)),
             )
             val fresh = entries.filterIndexed { i, _ -> !present[i] }
-            val groups = fresh.groupBy { Ledger.idFor(it.year, it.month, it.title) }
+
+            // Lines filed under a plain note (recurring or income) grow that note's month instead.
+            var plainNotes = 0
+            val ledgerLines = mutableListOf<ImportEntry>()
+            for ((noteId, group) in fresh.filter { it.noteId != null }.groupBy { it.noteId }) {
+                val content = runCatching { storage.read(account, "$noteId.md") }.getOrNull()
+                if (content == null || LedgerMapper.isLedger(content)) {
+                    ledgerLines += group // the note is gone or not a plain one: fall back to a ledger
+                    continue
+                }
+                val expense = ExpenseMapper.read(noteId!!, account, content, group.first().year)
+                val updated = expense.withAddedLines(group)
+                val text = LedgerMapper.withAppendedRows(
+                    ExpenseMapper.write(content, expense, updated, links),
+                    group.map { it.entry },
+                )
+                storage.write(account, "$noteId.md", text)
+                cache.upsertAll(listOf(updated))
+                plainNotes++
+            }
+            ledgerLines += fresh.filter { it.noteId == null }
+            val groups = ledgerLines.groupBy { Ledger.idFor(it.year, it.month, it.title) }
             for ((id, group) in groups) {
                 val first = group.first()
                 val existingContent = runCatching { storage.read(account, "$id.md") }.getOrNull()
@@ -140,21 +162,39 @@ class VaultRepository(
                 storage.write(account, "$id.md", LedgerMapper.write(existingContent, ledger, links))
                 cache.upsertAll(listOf(ledger.toExpense()))
             }
-            ImportResult(added = fresh.size, skipped = entries.size - fresh.size, notes = groups.size)
+            ImportResult(added = fresh.size, skipped = entries.size - fresh.size, notes = groups.size + plainNotes)
         }
     }
 
-    /** How many times each row already sits in any of the account's ledgers for [months]. */
-    suspend fun existingEntryCounts(account: String, months: Set<Pair<Int, Month>>): Map<EntryKey, Int> =
-        ImportDedup.count(ledgersIn(account, months).flatMap { it.entries })
+    /** [this] with each line's amount added to its month, and those months marked paid/received. */
+    private fun Expense.withAddedLines(lines: List<ImportEntry>): Expense {
+        val sums = lines.groupBy { it.month }.mapValues { (_, l) -> l.sumOf { it.entry.amount } }
+        return copy(
+            amounts = amounts + sums.mapValues { (m, s) -> round(((amounts[m] ?: 0.0) + s) * 100) / 100 },
+            // Statement lines are money that has already moved.
+            paid = paid + sums.mapValues { true },
+        )
+    }
 
-    private suspend fun ledgersIn(account: String, months: Set<Pair<Int, Month>>): List<Ledger> {
+    /** How many times each row already sits in any of the account's notes for [months]. */
+    suspend fun existingEntryCounts(account: String, months: Set<Pair<Int, Month>>): Map<EntryKey, Int> =
+        ImportDedup.count(entriesIn(account, months))
+
+    /**
+     * The rows the account already holds: every ledger of [months], plus the rows kept in the body
+     * of plain notes (see [LedgerMapper.withAppendedRows]) — a key includes the date, so those need
+     * no month filter.
+     */
+    private suspend fun entriesIn(account: String, months: Set<Pair<Int, Month>>): List<LedgerEntry> {
         if (months.isEmpty()) return emptyList()
         val files = runCatching { storage.listNotes(account) }.getOrDefault(emptyList())
-        return files.mapNotNull { file ->
-            val content = runCatching { storage.read(account, file) }.getOrNull() ?: return@mapNotNull null
-            LedgerMapper.read(file.removeSuffix(".md"), account, content, months.first().first)
-                ?.takeIf { (it.year to it.month) in months }
+        return files.flatMap { file ->
+            val content = runCatching { storage.read(account, file) }.getOrNull() ?: return@flatMap emptyList()
+            val ledger = LedgerMapper.read(file.removeSuffix(".md"), account, content, months.first().first)
+            when {
+                ledger != null -> if ((ledger.year to ledger.month) in months) ledger.entries else emptyList()
+                else -> LedgerMapper.tableEntries(content)
+            }
         }
     }
 

@@ -93,6 +93,73 @@ class StatementImportFlowTest {
         assertEquals(90.4, repo.paidTotal(account, 2026), 0.001, "50 + 7.50 + 12.90 + 10 + 10")
     }
 
+    private val walmart = """
+        ---
+        title: Walmart
+        account: "[[nubank|Nubank]]"
+        year: 2026
+        type: recurring-variable
+        renewal_date: 2027-01-01
+        jul: 100
+        jul-paid: false
+        aug: 20.5
+        aug-paid: false
+        ---
+
+        Compras do mês, sempre no cartão.
+    """.trimIndent() + "\n"
+
+    private fun inWalmart(day: Int, note: String, amount: Double) =
+        ImportEntry(2026, Month.AUG, "Walmart", null, income = false, LedgerEntry("202608${day.toString().padStart(2, '0')}", note, amount), noteId = "Walmart")
+
+    @Test
+    fun lines_filed_under_a_plain_note_grow_its_month_and_keep_what_it_had() = runBlocking {
+        File(vault, "nubank/Walmart.md").writeText(walmart)
+        val result = repo.importEntries(account, listOf(inWalmart(3, "Compra A", 10.25), inWalmart(9, "Compra B", 4.0)))
+
+        assertEquals(2, result.added)
+        assertEquals(1, result.notes)
+        val text = File(vault, "nubank/Walmart.md").readText()
+        assertTrue("aug: 34.75" in text, "20.50 + 10.25 + 4.00: $text")
+        assertTrue("aug-paid: true" in text, text)
+        assertTrue("jul: 100" in text && "jul-paid: false" in text, "other months untouched: $text")
+        assertTrue("renewal_date: 2027-01-01" in text, "unknown keys survive: $text")
+        assertTrue("Compras do mês, sempre no cartão." in text, "prose survives: $text")
+        assertTrue(Regex("""\|\s*20260803\s*\|\s*Compra A\s*\|\s*10\.25\s*\|""").containsMatchIn(text), "the rows are kept: $text")
+        assertTrue(!vault.walkTopDown().any { it.name.startsWith("2026 Aug - Walmart") }, "no ledger was made")
+    }
+
+    @Test
+    fun importing_into_a_plain_note_twice_adds_nothing() = runBlocking {
+        File(vault, "nubank/Walmart.md").writeText(walmart)
+        val lines = listOf(inWalmart(3, "Compra A", 10.25))
+        repo.importEntries(account, lines)
+        val once = File(vault, "nubank/Walmart.md").readText()
+
+        val again = repo.importEntries(account, lines)
+        assertEquals(0, again.added)
+        assertEquals(1, again.skipped)
+        assertEquals(once, File(vault, "nubank/Walmart.md").readText(), "not a byte changed")
+    }
+
+    @Test
+    fun a_second_import_extends_the_same_table() = runBlocking {
+        File(vault, "nubank/Walmart.md").writeText(walmart)
+        repo.importEntries(account, listOf(inWalmart(3, "Compra A", 10.0)))
+        repo.importEntries(account, listOf(inWalmart(9, "Compra B", 5.0)))
+        val text = File(vault, "nubank/Walmart.md").readText()
+        assertEquals(1, Regex("""\| Date""").findAll(text).count(), "one table, not two: $text")
+        assertTrue("aug: 35.5" in text, text)
+        assertTrue("Compra A" in text && "Compra B" in text, text)
+    }
+
+    @Test
+    fun a_vanished_plain_note_falls_back_to_a_ledger() = runBlocking {
+        val result = repo.importEntries(account, listOf(inWalmart(3, "Compra A", 10.0)))
+        assertEquals(1, result.added)
+        assertTrue(File(vault, "nubank/2026 Aug - Walmart.md").isFile)
+    }
+
     @Test
     fun pdf_text_keeps_each_row_on_one_line() {
         // Laid out as a statement is: date, description and amount drawn separately, right column first.

@@ -76,6 +76,7 @@ interface Strings {
     val received: String
     val incomeAmountHint: String
     val groupLabel: String
+    val groupFollowsCategory: String
     val groupHint: String
     val dateLabel: String
     val numberLabel: String

@@ -2,6 +2,8 @@ package com.mdmoney.importer
 
 import com.mdmoney.domain.Category
 import com.mdmoney.domain.Currency
+import com.mdmoney.domain.Expense
+import com.mdmoney.domain.ExpenseType
 import com.mdmoney.domain.LedgerEntry
 import com.mdmoney.domain.Month
 import kotlin.test.Test
@@ -50,6 +52,53 @@ class ImportPlannerTest {
         val income = entries.single { it.income }
         assertEquals("Entradas", income.title)
         assertEquals(1000.0, income.entry.amount)
+    }
+
+    @Test
+    fun a_chosen_group_wins_over_the_category_and_income_takes_its_own() {
+        val rows = ImportPlanner.initialRows(lines, emptyMap())
+            .map {
+                if (it.tx.kind == TxKind.INCOME) it.copy(selected = true, group = GroupChoice("Salários", "2026 - Salários"))
+                else it.copy(group = GroupChoice("Mercado & Casa"))
+            }
+        val entries = ImportPlanner.entries(rows, listOf(Category("food", "Alimentação")), "Importado", "Entradas")
+
+        // The categorised line keeps its category but lands in the chosen note.
+        assertEquals("Mercado & Casa", entries.first().title)
+        assertEquals("food", entries.first().category)
+        assertEquals("Mercado & Casa", entries[1].title, "uncategorised spending too")
+        assertEquals("Salários", entries.single { it.income }.title)
+        assertEquals("2026 - Salários", entries.single { it.income }.noteId, "a plain note is addressed by id")
+        assertEquals(null, entries.first().noteId, "a ledger group has none")
+
+        val ungrouped = ImportPlanner.entries(
+            rows.map { if (it.isIncome) it.copy(group = null) else it }, emptyList(), "Importado", "Entradas",
+        )
+        assertEquals("Entradas", ungrouped.single { it.income }.title, "no pick keeps the default income note")
+    }
+
+    @Test
+    fun groups_offered_are_recurring_and_ledger_notes_of_the_right_direction_and_year() {
+        fun note(id: String, title: String, year: Int, ledger: Boolean, type: ExpenseType) =
+            Expense.empty("a", year, type).copy(id = id, title = title, ledger = ledger)
+        val groups = AccountGroups(
+            listOf(
+                note("w26", "Walmart", 2026, false, ExpenseType.RECURRING_VARIABLE),
+                note("w25", "Walmart", 2025, false, ExpenseType.RECURRING_VARIABLE),
+                note("2026 Aug - Mercado", "Mercado", 2026, true, ExpenseType.EVENTUAL),
+                note("2025 Aug - Mercado", "Mercado", 2025, true, ExpenseType.EVENTUAL),
+                note("s26", "Salario", 2026, false, ExpenseType.INCOME),
+            ),
+        )
+        val spend = ImportPlanner.initialRows(listOf(tx(1, "x", 1.0, TxKind.PURCHASE)), emptyMap()).single()
+        val income = ImportPlanner.initialRows(listOf(tx(1, "y", 1.0, TxKind.INCOME, Direction.CREDIT)), emptyMap()).single()
+
+        assertEquals(
+            listOf(GroupChoice("Mercado"), GroupChoice("Walmart", "w26")),
+            groups.forRow(spend),
+            "this year's Walmart note, and the ledger group once however many months it has",
+        )
+        assertEquals(listOf(GroupChoice("Salario", "s26")), groups.forRow(income))
     }
 
     @Test

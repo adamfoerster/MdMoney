@@ -15,6 +15,11 @@ data class ImportEntry(
     val category: String?,
     val income: Boolean,
     val entry: LedgerEntry,
+    /**
+     * Set when the user filed the line under an existing plain (recurring or income) note: the id of
+     * that note, whose month amount grows by the line instead of a ledger getting a row.
+     */
+    val noteId: String? = null,
 )
 
 /** What an import did: rows written, rows already in the vault (skipped), notes touched. */

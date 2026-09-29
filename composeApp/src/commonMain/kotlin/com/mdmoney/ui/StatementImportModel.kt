@@ -5,7 +5,9 @@ import com.mdmoney.data.VaultRepository
 import com.mdmoney.domain.Category
 import com.mdmoney.domain.Currency
 import com.mdmoney.domain.Month
+import com.mdmoney.importer.AccountGroups
 import com.mdmoney.importer.ExtractionResult
+import com.mdmoney.importer.GroupChoice
 import com.mdmoney.importer.ImportModelPreset
 import com.mdmoney.importer.ImportPlanner
 import com.mdmoney.importer.ImportPlatform
@@ -71,6 +73,8 @@ data class ImportUiState(
     val account: String? = null,
     /** That account's currency, to warn when the statement is in another. */
     val accountCurrency: Currency = Currency.NONE,
+    /** That account's existing groups, for filing lines under one of them. */
+    val groups: AccountGroups = AccountGroups(),
     val importing: Boolean = false,
 )
 
@@ -190,7 +194,11 @@ class StatementImportModel(
 
     private suspend fun loadCurrency(account: String) {
         val currency = runCatching { repo.accountMeta(account).currency }.getOrDefault(Currency.NONE)
-        _state.update { if (it.account == account) it.copy(accountCurrency = currency) else it }
+        // Read from the vault, not the open screen's list: the account being imported into needn't be
+        // the open one, and that list only holds one year.
+        val groups = runCatching { AccountGroups(repo.loadExpenses(account, fallbackYear())) }
+            .getOrDefault(AccountGroups())
+        _state.update { if (it.account == account) it.copy(accountCurrency = currency, groups = groups) else it }
     }
 
     fun cancel() {
@@ -199,7 +207,8 @@ class StatementImportModel(
 
     /** Changes where the lines go, re-checking which of them that account already holds. */
     fun setAccount(account: String) = scope.launch {
-        _state.update { it.copy(account = account) }
+        // Groups belong to an account, so a pick made against the previous one no longer applies.
+        _state.update { st -> st.copy(account = account, rows = st.rows.map { it.copy(group = null) }) }
         loadCurrency(account)
         val rows = _state.value.rows
         if (rows.isEmpty()) return@launch
@@ -264,6 +273,8 @@ class StatementImportModel(
     fun setDescription(id: Int, text: String) = updateRow(id) { it.copy(description = text) }
 
     fun setCategory(id: Int, slug: String?) = updateRow(id) { it.copy(category = slug) }
+
+    fun setGroup(id: Int, group: GroupChoice?) = updateRow(id) { it.copy(group = group) }
 
     /** Ticks or unticks every row that isn't already in the vault. */
     fun selectAll(selected: Boolean) = _state.update { st ->

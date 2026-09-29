@@ -12,6 +12,20 @@ heading when you cut a release.
 
 ## [Unreleased]
 
+## [0.7.0] — 2026-09-29
+
+### Added
+
+- **Pick a group for each imported line.** Beside the category, every line on the statement review
+  screen now has a "Group" menu listing what the chosen account already has (read from the vault, so
+  it works for any account): its one-off groups, its recurring bills and — for money received — its
+  income lines. Filing a line under a recurring or income note adds its amount to that note's month
+  (marking it paid/received) and keeps the lines in a `Date | Note | Amount` table in the note's body,
+  which is also how re-importing the same statement is recognised and skipped. Other frontmatter keys
+  and prose in the note are untouched. Filing under a one-off group puts the line in that group's
+  note for its month instead of the one its category implies. "By category" (the default) keeps the
+  old behaviour, and money received without a pick still goes to the default income note.
+
 ## [0.6.1] — 2026-09-29
 
 ### Fixed
