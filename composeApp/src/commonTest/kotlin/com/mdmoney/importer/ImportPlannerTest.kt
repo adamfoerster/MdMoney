@@ -9,6 +9,7 @@ import com.mdmoney.domain.Month
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class ImportPlannerTest {
@@ -148,10 +149,9 @@ class ImportPlannerTest {
     }
 
     @Test
-    fun a_corrected_amount_is_kept_to_cents_and_must_be_positive() {
+    fun a_corrected_amount_is_kept_to_cents_and_cannot_be_negative() {
         val rows = ImportPlanner.initialRows(lines, emptyMap())
         assertEquals(61.9, ImportPlanner.withAmount(rows, 0, 61.899999, emptyMap())[0].tx.amount)
-        assertEquals(rows, ImportPlanner.withAmount(rows, 0, 0.0, emptyMap()))
         assertEquals(rows, ImportPlanner.withAmount(rows, 0, -5.0, emptyMap()))
     }
 
@@ -169,5 +169,33 @@ class ImportPlannerTest {
         assertEquals(1, ImportPlanner.nextReview(0, 3))
         assertEquals(2, ImportPlanner.nextReview(1, 3))
         assertEquals(null, ImportPlanner.nextReview(2, 3))
+    }
+
+    @Test
+    fun zero_says_the_line_never_happened() {
+        val header = StatementHeader(declaredDebits = 532.9)
+        val rows = ImportPlanner.initialRows(lines, emptyMap())
+        assertTrue(rows[0].selected)
+        // 582.90 read; the 50.00 market purchase was cancelled, so the statement prints 532.90.
+        val zeroed = ImportPlanner.withAmount(rows, id = 0, amount = 0.0, existing = emptyMap())
+        assertEquals(0.0, zeroed[0].tx.amount)
+        assertFalse(zeroed[0].selected, "unticked")
+        assertFalse(zeroed[0].selectable, "and can't be ticked again while it is 0")
+        assertEquals(true, ImportPlanner.reconcile(zeroed, header).debitsMatch)
+        val entries = ImportPlanner.entries(zeroed.map { it.copy(selected = true) }, emptyList(), "Importado", "Entradas")
+        assertFalse(entries.any { it.entry.note == "Mercado" }, "a zero line is never written, even if ticked somehow")
+    }
+
+    @Test
+    fun a_typed_amount_reads_as_statements_print_them() {
+        assertEquals(33.08, ImportPlanner.typedAmount("33,08"))
+        assertEquals(33.08, ImportPlanner.typedAmount("33.08"))
+        assertEquals(1234.56, ImportPlanner.typedAmount("1.234,56"), "the app's own amount parser used to reject this")
+        assertEquals(1234.56, ImportPlanner.typedAmount("1,234.56"))
+        assertEquals(0.0, ImportPlanner.typedAmount("0"))
+        assertEquals(0.0, ImportPlanner.typedAmount("0,00"))
+        assertNull(ImportPlanner.typedAmount(""))
+        assertNull(ImportPlanner.typedAmount("-5"))
+        assertNull(ImportPlanner.typedAmount("abc"))
     }
 }

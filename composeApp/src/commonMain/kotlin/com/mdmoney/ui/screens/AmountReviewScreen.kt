@@ -51,7 +51,7 @@ import androidx.compose.ui.unit.dp
 import com.mdmoney.LocalDecimalSeparator
 import com.mdmoney.LocalStrings
 import com.mdmoney.data.formatInput
-import com.mdmoney.data.parseAmount
+import com.mdmoney.importer.ImportPlanner
 import com.mdmoney.importer.ReviewRow
 import com.mdmoney.ui.ImportPhase
 import com.mdmoney.ui.ImportUiState
@@ -86,11 +86,26 @@ fun AmountReviewScreen(importer: StatementImportModel, state: ImportUiState, pha
     var page by remember { mutableStateOf(row.tx.page ?: 0) }
     // Each new line brings its own page into view; the user can still wander off to another.
     LaunchedEffect(row.id) { row.tx.page?.let { page = it.coerceIn(0, pageCount - 1) } }
+    val sep = LocalDecimalSeparator.current
+    // The typed amount is held here rather than in the bar so that every way out keeps it: ✓, the
+    // field losing focus, and the back button — which used to drop it, since leaving the screen
+    // never told the field it had lost focus.
+    var text by remember(row.id, row.tx.amount, sep) { mutableStateOf(formatInput(row.tx.amount, sep)) }
+
+    /** Writes the typed amount back; one that can't be read (or is negative) is put back as it was. */
+    fun commit() {
+        val typed = ImportPlanner.typedAmount(text)
+        if (typed == null) text = formatInput(row.tx.amount, sep)
+        else if (typed != row.tx.amount) importer.setAmount(row.id, typed)
+    }
 
     Surface(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
-                ReinoButton("‹ ${s.importStatement}", onClick = { importer.closeAmountReview() }, variant = ReinoButtonVariant.Ghost)
+                ReinoButton("‹ ${s.importStatement}", onClick = {
+                    commit()
+                    importer.closeAmountReview()
+                }, variant = ReinoButtonVariant.Ghost)
             }
             HairlineDivider()
             PdfPageViewer(importer, page, pageCount, Modifier.weight(1f).fillMaxWidth())
@@ -110,7 +125,16 @@ fun AmountReviewScreen(importer: StatementImportModel, state: ImportUiState, pha
                 ReinoButton("›", onClick = { page++ }, variant = ReinoButtonVariant.Ghost, enabled = page < pageCount - 1)
             }
             HairlineDivider()
-            ReviewBar(importer, row, position, state.rows.size, phase)
+            ReviewBar(
+                row, position, state.rows.size, phase,
+                text = text,
+                onText = { text = it },
+                commit = ::commit,
+                onConfirm = {
+                    commit()
+                    importer.confirmAndNext()
+                },
+            )
         }
     }
 }
@@ -218,18 +242,18 @@ private const val WHEEL_STEP_PX = 40f
 
 /** The line under review: what was read, its amount (editable), the totals so far, and ✓ for the next. */
 @Composable
-private fun ReviewBar(importer: StatementImportModel, row: ReviewRow, position: Int, count: Int, phase: ImportPhase.Review) {
+private fun ReviewBar(
+    row: ReviewRow,
+    position: Int,
+    count: Int,
+    phase: ImportPhase.Review,
+    text: String,
+    onText: (String) -> Unit,
+    commit: () -> Unit,
+    onConfirm: () -> Unit,
+) {
     val s = LocalStrings.current
-    val sep = LocalDecimalSeparator.current
     val reino = LocalReinoColors.current
-    var text by remember(row.id, row.tx.amount, sep) { mutableStateOf(formatInput(row.tx.amount, sep)) }
-
-    /** Writes a typed amount back; a blank or impossible one is put back as it was. */
-    fun commit() {
-        val typed = parseAmount(text)
-        if (typed == null || typed <= 0.0) text = formatInput(row.tx.amount, sep)
-        else if (typed != row.tx.amount) importer.setAmount(row.id, typed)
-    }
 
     Column(Modifier.fillMaxWidth().background(reino.paperDeep).padding(horizontal = 16.dp, vertical = 12.dp)) {
         Text(
@@ -260,7 +284,7 @@ private fun ReviewBar(importer: StatementImportModel, row: ReviewRow, position: 
             if (row.isIncome) Text("+", style = MaterialTheme.typography.bodyLarge, color = reino.verdigris)
             ReinoField(
                 value = text,
-                onValueChange = { text = it },
+                onValueChange = onText,
                 textStyle = MaterialTheme.typography.bodyLarge.copy(color = if (row.isIncome) reino.verdigris else reino.ink),
                 contentAlignment = Alignment.CenterEnd,
                 keyboardType = KeyboardType.Decimal,
@@ -268,10 +292,7 @@ private fun ReviewBar(importer: StatementImportModel, row: ReviewRow, position: 
                 modifier = Modifier.width(120.dp),
             )
             Spacer(Modifier.width(12.dp))
-            CheckButton(s.confirmLine) {
-                commit()
-                importer.confirmAndNext()
-            }
+            CheckButton(s.confirmLine, onConfirm)
         }
         ReconciliationLines(phase.result.reconciliation)
     }

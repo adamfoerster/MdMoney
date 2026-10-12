@@ -29,6 +29,8 @@ data class StatementLine(
     val isHeading: Boolean,
     /** Carries a word only totals and balances use (total, saldo, balance, limite…). */
     val isSummary: Boolean,
+    /** Printed as cancelled or declined — on the line itself, or as a status line right below it. */
+    val cancelled: Boolean = false,
 ) {
     /** The date that applies: the line's own, else its heading's. */
     val effectiveDate: DateParts? get() = date ?: headingDate
@@ -63,6 +65,16 @@ object StatementLines {
     private val incomingSection = Regex("""total de entradas|deposits|cr[eé]ditos""", RegexOption.IGNORE_CASE)
     private val outgoingSection = Regex("""total de sa[ií]das|withdrawals|d[eé]bitos""", RegexOption.IGNORE_CASE)
 
+    /**
+     * A transaction's status as statements print it — alone on the line below (Nomad: `Concluído` /
+     * `Cancelado`) or at the very end of the line. Only the ones that mean the money never moved.
+     * `Estorno` is left out on purpose: that is the refund's own line, and it carries an amount.
+     */
+    private const val CANCELLED_WORD =
+        """(cancelad[oa]s?|cancel+ed|estornad[oa]|recusad[oa]|negad[oa]|rejeitad[oa]|declined|rejected|reversed|voided|n[aã]o autorizad[oa])"""
+    private val statusLine = Regex("""^\(?$CANCELLED_WORD\)?\.?$""", RegexOption.IGNORE_CASE)
+    private val trailingStatus = Regex("""\s+[-–·|(]?\s*$CANCELLED_WORD\)?\.?$""", RegexOption.IGNORE_CASE)
+
     /** A date found on a line and where it sits; only a date at the start can head other lines. */
     private class Found(val parts: DateParts, val range: IntRange, val leading: Boolean)
 
@@ -74,7 +86,18 @@ object StatementLines {
         pages.forEachIndexed { pageIndex, page ->
             for (raw in page.lines()) {
                 if (raw.isBlank()) continue
-                val line = raw.trim()
+                val trimmed = raw.trim()
+                // A status line belongs to the transaction just above it, on the same page.
+                if (statusLine.matches(trimmed)) {
+                    val last = out.lastOrNull()
+                    if (last != null && last.page == pageIndex && last.amount != null) {
+                        out[out.lastIndex] = last.copy(cancelled = true)
+                    }
+                    continue
+                }
+                // A status after the amount would hide the amount from the pattern that finds it.
+                val statusAtEnd = trailingStatus.find(trimmed)
+                val line = statusAtEnd?.let { trimmed.substring(0, it.range.first).trim() } ?: trimmed
                 when {
                     incomingSection.containsMatchIn(line) -> section = Direction.CREDIT
                     outgoingSection.containsMatchIn(line) -> section = Direction.DEBIT
@@ -103,6 +126,7 @@ object StatementLines {
                         description = clean(body),
                         isHeading = isHeading,
                         isSummary = isSummary,
+                        cancelled = statusAtEnd != null,
                     ),
                 )
                 if (isHeading) headingDate = found?.parts

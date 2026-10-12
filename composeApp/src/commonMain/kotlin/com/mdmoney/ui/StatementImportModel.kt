@@ -287,7 +287,7 @@ class StatementImportModel(
         }
     }
 
-    fun toggle(id: Int) = updateRow(id) { it.copy(selected = !it.selected) }
+    fun toggle(id: Int) = updateRow(id) { if (it.selectable) it.copy(selected = !it.selected) else it }
 
     fun setDescription(id: Int, text: String) = updateRow(id) { it.copy(description = text) }
 
@@ -295,9 +295,9 @@ class StatementImportModel(
 
     fun setGroup(id: Int, group: GroupChoice?) = updateRow(id) { it.copy(group = group) }
 
-    /** Ticks or unticks every row that isn't already in the vault. */
+    /** Ticks or unticks every row that can be imported (not already in the vault, not set to 0). */
     fun selectAll(selected: Boolean) = _state.update { st ->
-        st.copy(rows = st.rows.map { if (it.alreadyImported) it else it.copy(selected = selected) })
+        st.copy(rows = st.rows.map { if (it.selectable) it.copy(selected = selected) else it })
     }
 
     private fun updateRow(id: Int, change: (ReviewRow) -> ReviewRow) = _state.update { st ->

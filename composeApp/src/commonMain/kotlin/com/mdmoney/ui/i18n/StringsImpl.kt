@@ -126,6 +126,7 @@ object EnStrings : Strings {
         Doubt.AMOUNT_NOT_FOUND -> "amount not found in the PDF"
         Doubt.DATE_OUTSIDE_PERIOD -> "date outside the statement period"
         Doubt.READERS_DISAGREE -> "the model and the rules disagree"
+        Doubt.CANCELLED -> "cancelled on the statement"
     }
     override val selectAll = "Select all"
     override val selectNone = "Select none"
@@ -281,6 +282,7 @@ object PtStrings : Strings {
         Doubt.AMOUNT_NOT_FOUND -> "valor não encontrado no PDF"
         Doubt.DATE_OUTSIDE_PERIOD -> "data fora do período do extrato"
         Doubt.READERS_DISAGREE -> "o modelo e as regras discordam"
+        Doubt.CANCELLED -> "cancelada no extrato"
     }
     override val selectAll = "Marcar todos"
     override val selectNone = "Desmarcar todos"
@@ -436,6 +438,7 @@ object EsStrings : Strings {
         Doubt.AMOUNT_NOT_FOUND -> "importe no encontrado en el PDF"
         Doubt.DATE_OUTSIDE_PERIOD -> "fecha fuera del período del extracto"
         Doubt.READERS_DISAGREE -> "el modelo y las reglas no coinciden"
+        Doubt.CANCELLED -> "cancelada en el extracto"
     }
     override val selectAll = "Marcar todos"
     override val selectNone = "Desmarcar todos"

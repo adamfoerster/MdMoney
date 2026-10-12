@@ -20,6 +20,9 @@ data class ReviewRow(
     val alreadyImported: Boolean,
 ) {
     val isIncome: Boolean get() = tx.direction == Direction.CREDIT
+
+    /** Whether ticking it means anything: not already in the vault, and not set to 0 (didn't happen). */
+    val selectable: Boolean get() = !alreadyImported && tx.amount > 0
 }
 
 /**
@@ -86,7 +89,7 @@ object ImportPlanner {
         categories: List<Category>,
         uncategorizedTitle: String,
         incomeTitle: String,
-    ): List<ImportEntry> = rows.filter { it.selected }.map { row ->
+    ): List<ImportEntry> = rows.filter { it.selected && it.selectable }.map { row ->
         val title = when {
             row.group != null -> row.group.title
             row.isIncome -> incomeTitle
@@ -110,16 +113,27 @@ object ImportPlanner {
     fun needsAmountReview(r: Reconciliation): Boolean = r.debitsMatch == false || r.creditsMatch == false
 
     /**
-     * [rows] with row [id]'s amount corrected to [amount] (in cents; anything not positive is
-     * ignored). The amount is part of what makes a line a duplicate, so every row is re-checked
+     * [rows] with row [id]'s amount corrected to [amount] (in cents; a negative one is ignored).
+     * 0 says the line never happened — cancelled, say — so it is unticked and drops out of the
+     * totals. The amount is part of what makes a line a duplicate, so every row is re-checked
      * against the vault's [existing] entries.
      */
     fun withAmount(rows: List<ReviewRow>, id: Int, amount: Double, existing: Map<EntryKey, Int>): List<ReviewRow> {
         val cents = kotlin.math.round(amount * 100) / 100
-        if (cents <= 0.0) return rows
-        val changed = rows.map { if (it.id == id) it.copy(tx = it.tx.copy(amount = cents)) else it }
+        if (cents < 0.0) return rows
+        val changed = rows.map {
+            if (it.id == id) it.copy(tx = it.tx.copy(amount = cents), selected = it.selected && cents > 0) else it
+        }
         return markExisting(changed, existing)
     }
+
+    /**
+     * An amount typed on the review screen, read as a statement prints one (`1.234,56`,
+     * `1,234.56`, `33,08`, `0`), or null when it can't be read or is negative. 0 is an answer: the
+     * line didn't happen (see [withAmount]).
+     */
+    fun typedAmount(text: String): Double? =
+        StatementText.parseAmount(text)?.takeIf { it >= 0.0 && text.none { c -> c.isLetter() } }
 
     /** The statement's totals against the rows as the user has corrected them. */
     fun reconcile(rows: List<ReviewRow>, header: StatementHeader): Reconciliation =

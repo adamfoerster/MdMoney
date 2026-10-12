@@ -12,6 +12,30 @@ heading when you cut a release.
 
 ## [Unreleased]
 
+## [0.9.0] — 2026-10-12
+
+### Changed
+
+- **"Review amounts" is always available on the statement review screen**, not only when the
+  totals differ: matching totals don't prove every line is right (two errors can cancel out, and many
+  statements print no total at all). The warning above it still appears only when they disagree.
+
+### Fixed
+
+- **Cancelled transactions are no longer imported as spending.** A line the statement marks
+  cancelled or declined — with the status on the line below it, as Nomad prints `Cancelado`, or at
+  the end of the line — is now shown unticked, marked "cancelled on the statement", and left out of
+  the totals. The model can't overrule it.
+- **A total the statement doesn't print is no longer believed.** The model could report one
+  transaction's amount as a printed total (on a statement with no total of credits it offered a
+  purchase's), which made the totals "differ" for no reason. A total now has to appear outside the
+  transaction lines.
+- **Amounts corrected on the "Review amounts" screen are kept when you go back.** Leaving by the
+  back arrow without pressing ✓ used to drop the amount just typed. Amounts written with thousands
+  separators (`1.234,56`) are now understood instead of being put back.
+- **0 is a valid correction.** Typing 0 says the line never happened: it is unticked, can't be
+  ticked while it stays 0, and drops out of the totals. It used to be silently put back.
+
 ## [0.8.1] — 2026-09-29
 
 ### Fixed

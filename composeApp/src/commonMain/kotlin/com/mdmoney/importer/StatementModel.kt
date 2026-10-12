@@ -82,6 +82,8 @@ data class RawTransaction(
     val disputed: Boolean = false,
     /** The page (0-based) the line was printed on, when known. */
     val page: Int? = null,
+    /** The statement prints the line as cancelled or declined (see [Doubt.CANCELLED]). */
+    val cancelled: Boolean = false,
 )
 
 /** A statement line with its full date settled, ready for review. */
@@ -110,6 +112,9 @@ enum class Doubt {
 
     /** The model and the fixed rules disagree about whether this line is a transaction at all. */
     READERS_DISAGREE,
+
+    /** The statement marks the line cancelled (or declined): it lists it, but the money never moved. */
+    CANCELLED,
 }
 
 /** What the statement says about itself: its period, currency and printed totals. */

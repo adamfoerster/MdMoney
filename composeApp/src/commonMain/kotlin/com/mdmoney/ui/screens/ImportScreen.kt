@@ -212,8 +212,12 @@ private fun ReviewPhase(importer: StatementImportModel, state: ImportUiState, ph
 
     Spacer(Modifier.height(16.dp))
     ReconciliationLines(result.reconciliation)
-    if (ImportPlanner.needsAmountReview(result.reconciliation) && state.rows.isNotEmpty()) {
-        Text(s.reviewAmountsHint, style = MaterialTheme.typography.bodySmall, color = reino.brassDeep, modifier = Modifier.padding(top = 8.dp))
+    // Always on offer — matching totals don't prove every line is right (two errors can cancel out,
+    // and a statement may print no total at all); the hint only appears when they disagree.
+    if (state.rows.isNotEmpty()) {
+        if (ImportPlanner.needsAmountReview(result.reconciliation)) {
+            Text(s.reviewAmountsHint, style = MaterialTheme.typography.bodySmall, color = reino.brassDeep, modifier = Modifier.padding(top = 8.dp))
+        }
         Spacer(Modifier.height(8.dp))
         ReinoButton(s.reviewAmounts, onClick = { importer.openAmountReview() }, variant = ReinoButtonVariant.Secondary, trailingArrow = true)
     }
@@ -273,7 +277,7 @@ private fun ReviewLine(row: ReviewRow, categories: List<Category>, groups: List<
     val s = LocalStrings.current
     val sep = LocalDecimalSeparator.current
     val reino = LocalReinoColors.current
-    val muted = row.alreadyImported
+    val muted = !row.selectable
     Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.Top) {
         ReinoCheckbox(
             checked = row.selected,

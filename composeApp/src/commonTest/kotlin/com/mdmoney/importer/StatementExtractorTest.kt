@@ -175,4 +175,72 @@ class StatementExtractorTest {
         assertNull(h.declaredDebits)
         assertEquals(12.0, h.declaredCredits)
     }
+
+    /** Nomad's account statement: each transaction's status is printed on the line below it. */
+    private val nomad = """
+        Extrato mensal de transações da conta depósito
+        Período
+        1 de fevereiro de 2026 até 28 de fevereiro de 2026
+        Saldo final do período Taxas cobradas Total de saídas Saldo inicial
+        US$ 13,17 US$ 0,00 US$ 4,00 US$ 17,17
+        Transações
+        Nomad Chip 23/02/2026 - 11:23 - US$ 4,00
+        Concluído
+        Compra AMAZON MKTPLACE PMTS 16/02/2026 - 13:24 - US$ 287,65
+        Cancelado
+        Compra AMAZON MKTPLACE PMTS 16/02/2026 - 13:01 - US$ 287,65
+        Cancelado
+    """.trimIndent()
+
+    @Test
+    fun a_line_the_statement_marks_cancelled_is_shown_but_not_counted() = runBlocking {
+        val result = StatementExtractor(null, emptyList()).extract(listOf(nomad), fallbackYear = 2026)
+        assertEquals(
+            listOf(4.0 to null, 287.65 to Doubt.CANCELLED, 287.65 to Doubt.CANCELLED),
+            result.transactions.map { it.amount to it.doubt },
+        )
+        assertEquals(4.0, result.reconciliation.debits, "the statement's own total of outgoings: US$ 4,00")
+        assertEquals(listOf(true, false, false), ImportPlanner.initialRows(result.transactions, emptyMap()).map { it.selected })
+    }
+
+    @Test
+    fun the_model_cannot_overrule_a_printed_cancellation() = runBlocking {
+        val llm = FakeLlm(
+            // What the 3B model really answered for this statement, which prints no total of credits.
+            header = """{"start":"2026-02-01","end":"2026-02-28","currency":"USD","debits":4.00,"credits":287.65}""",
+            pages = listOf(
+                """{"lines":[{"n":1,"tx":true,"dir":"debit","kind":"purchase","cat":"none"},""" +
+                    """{"n":2,"tx":true,"dir":"debit","kind":"purchase","cat":"none"},""" +
+                    """{"n":3,"tx":true,"dir":"debit","kind":"purchase","cat":"none"},""" +
+                    """{"n":4,"tx":true,"dir":"debit","kind":"purchase","cat":"none"}]}""",
+            ),
+        )
+        val result = StatementExtractor(llm, emptyList()).extract(listOf(nomad), fallbackYear = 2026)
+        val amazon = result.transactions.filter { it.description.contains("AMAZON") }
+        assertEquals(2, amazon.size)
+        assertTrue(amazon.all { it.doubt == Doubt.CANCELLED })
+        assertEquals(true, result.reconciliation.debitsMatch, "4.00 read, 4.00 printed")
+        assertNull(result.header.declaredCredits, "287,65 is only printed on a purchase line, so it is no total")
+        assertFalse(ImportPlanner.needsAmountReview(result.reconciliation))
+    }
+
+    @Test
+    fun a_status_at_the_end_of_the_line_counts_too_and_completed_does_not() {
+        val lines = StatementLines.analyze(
+            listOf(
+                """
+                05/03/2026 Loja Exemplo 50,00 Cancelada
+                06/03/2026 Padaria 12,00 - Declined
+                07/03/2026 Mercado 30,00
+                Concluído
+                08/03/2026 Farmácia 9,90
+                """.trimIndent(),
+                "Cancelado",
+            ),
+            monthFirst = false,
+        )
+        val amounts = lines.filter { it.amount != null }
+        assertEquals(listOf(50.0, 12.0, 30.0, 9.9), amounts.map { it.amount }, "the status doesn't hide the amount")
+        assertEquals(listOf(true, true, false, false), amounts.map { it.cancelled }, "a status line on the next page belongs to nothing")
+    }
 }

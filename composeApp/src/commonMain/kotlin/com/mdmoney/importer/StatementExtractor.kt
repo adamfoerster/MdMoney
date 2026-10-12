@@ -46,7 +46,7 @@ class StatementExtractor(
         var modelError: String? = null
         if (llm != null && readable.isNotEmpty()) {
             try {
-                header = mergeHeader(header, readHeader(llm, pages.first()), text)
+                header = mergeHeader(header, readHeader(llm, pages.first()), totalsText(lines.values.flatten()))
                 val out = mutableListOf<Pair<RawTransaction, String>>()
                 val system = StatementPrompt.transactionsSystem(header, monthFirst, categories)
                 val slugs = categories.map { it.slug }
@@ -96,6 +96,16 @@ class StatementExtractor(
         private const val MAX_HEADER_TOKENS = 120
 
         /**
+         * The statement without its transaction lines — where a printed total can be. A total the
+         * model reports must appear here: a small model asked for "total credits" on a statement
+         * that prints none will happily offer one purchase's amount (Nomad, with a cancelled
+         * US$ 287,65 purchase on it), and that amount is, of course, in the text.
+         */
+        fun totalsText(lines: List<StatementLine>): String =
+            lines.filterNot { it.amount != null && it.hasWords && !it.isSummary && !it.isHeading && it.effectiveDate != null }
+                .joinToString("\n") { it.text }
+
+        /**
          * What the text says outright wins over what the model read. Printed totals only come from
          * the model, so each must actually appear in the statement to be believed.
          */
@@ -123,6 +133,8 @@ class StatementExtractor(
                 kind = raw.kind,
                 category = raw.category,
                 doubt = when {
+                    // Not a guess: the page says so, with or without a model to check it.
+                    raw.cancelled -> Doubt.CANCELLED
                     raw.disputed -> Doubt.READERS_DISAGREE
                     !verify -> null
                     !StatementText.containsAmount(page, raw.amount) -> Doubt.AMOUNT_NOT_FOUND

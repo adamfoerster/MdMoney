@@ -54,6 +54,7 @@ object ExtractionJson {
                 kind = TxKind.fromId(o.string("kind")) ?: HeuristicStatementParser.guessKind(description, direction),
                 category = o.string("cat")?.takeIf { it.isNotBlank() && it != StatementGrammar.NO_CATEGORY },
                 page = line.page,
+                cancelled = line.cancelled,
             )
         }.toMap()
     }

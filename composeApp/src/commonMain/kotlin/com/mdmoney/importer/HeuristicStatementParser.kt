@@ -37,6 +37,7 @@ object HeuristicStatementParser {
             direction = direction,
             kind = guessKind(line.description, direction),
             page = line.page,
+            cancelled = line.cancelled,
         )
     }
 
