@@ -20,6 +20,17 @@ data class LedgerEntry(
 }
 
 /**
+ * The titles of the groups a purchase of [month] could be moved into: the ledgers [expenses] holds
+ * for that month, of the same kind (spending or income), except the one titled [except].
+ */
+fun groupTitles(expenses: List<Expense>, month: Month, income: Boolean, except: String? = null): List<String> =
+    expenses.filter { it.ledger && it.amounts[month] != null && it.isIncome == income }
+        .map { it.title }
+        .filter { !it.equals(except, ignoreCase = true) }
+        .distinct()
+        .sortedBy { it.lowercase() }
+
+/**
  * A month's worth of one-off spending grouped under one heading — one markdown note per
  * account/year/month/title, e.g. `2026 Jul - Alimentação.md`.
  *

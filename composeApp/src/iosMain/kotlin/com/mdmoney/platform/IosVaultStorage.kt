@@ -82,6 +82,11 @@ class IosVaultStorage : VaultStorage {
         NSString_writeToURL(content, url)
     }
 
+    override suspend fun delete(account: String, fileName: String) {
+        val url = accountUrl(account)?.URLByAppendingPathComponent(fileName) ?: return
+        fileManager.removeItemAtURL(url, error = null)
+    }
+
     override suspend fun readRootFile(fileName: String): String? {
         val url = requireRoot().URLByAppendingPathComponent(fileName) ?: return null
         return NSString_stringWithContentsOfURL(url)

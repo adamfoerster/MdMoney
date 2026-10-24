@@ -35,6 +35,17 @@ data class Expense(
     /** Money coming in rather than out; income adds to the balance instead of subtracting. */
     val isIncome: Boolean get() = type == ExpenseType.INCOME
 
+    /**
+     * The month of a plain one-off that could be folded into a group: an eventual expense or an
+     * income note carrying an amount in exactly one month. Null for anything else — a recurring
+     * bill, a note spread over several months, a ledger that already is a group.
+     */
+    val groupableMonth: Month? get() {
+        if (ledger || (type != ExpenseType.EVENTUAL && type != ExpenseType.INCOME)) return null
+        val filled = Month.ALL.filter { amounts[it] != null }
+        return filled.singleOrNull()?.takeIf { (amounts[it] ?: 0.0) > 0.0 }
+    }
+
     /** Sum of all months that carry a value (nulls treated as zero). */
     val total: Double get() = Month.ALL.sumOf { amounts[it] ?: 0.0 }
 

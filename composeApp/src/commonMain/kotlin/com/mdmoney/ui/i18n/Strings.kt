@@ -85,6 +85,11 @@ interface Strings {
     val noEntries: String
     val addEntry: String
     val editEntry: String
+    val groupNone: String
+    val moveToGroup: String
+    val moveOutOfGroup: String
+    val newGroupLabel: String
+    val cannotGroupNotice: String
     val remove: String
     val oneOffHint: String
     val categories: String

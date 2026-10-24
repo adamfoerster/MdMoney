@@ -304,9 +304,7 @@ private fun ReviewLine(row: ReviewRow, categories: List<Category>, groups: List<
             )
             Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 CategoryPicker(row.category, categories) { importer.setCategory(row.id, it) }
-                if (groups.isNotEmpty()) {
-                    GroupPicker(row.group, groups) { importer.setGroup(row.id, it) }
-                }
+                GroupPicker(row.group, groups) { importer.setGroup(row.id, it) }
             }
         }
         Text(
@@ -352,13 +350,14 @@ private fun GroupPicker(selected: GroupChoice?, groups: List<GroupChoice>, onPic
     var open by remember { mutableStateOf(false) }
     Box {
         Text(
-            "${s.groupLabel}: ${selected?.title ?: s.groupFollowsCategory} ▾",
+            "${s.groupLabel}: ${selected?.let { if (it.standalone) s.groupNone else it.title } ?: s.groupFollowsCategory} ▾",
             style = MaterialTheme.typography.labelMedium,
             color = reino.brass,
             modifier = Modifier.clickable { open = true }.padding(vertical = 6.dp),
         )
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             DropdownMenuItem(text = { Text(s.groupFollowsCategory) }, onClick = { onPick(null); open = false })
+            DropdownMenuItem(text = { Text(s.groupNone) }, onClick = { onPick(GroupChoice.NONE); open = false })
             groups.forEach { g ->
                 DropdownMenuItem(text = { Text(g.title) }, onClick = { onPick(g); open = false })
             }

@@ -37,7 +37,12 @@ import com.mdmoney.ui.components.chipRowScroll
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun EditExpenseSheet(model: AppModel, editor: EditorState, categories: List<Category> = emptyList()) {
+fun EditExpenseSheet(
+    model: AppModel,
+    editor: EditorState,
+    categories: List<Category> = emptyList(),
+    groups: List<String> = emptyList(),
+) {
     val s = LocalStrings.current
     val sep = LocalDecimalSeparator.current
     val cur = LocalCurrencySymbol.current
@@ -159,6 +164,11 @@ fun EditExpenseSheet(model: AppModel, editor: EditorState, categories: List<Cate
                         modifier = Modifier.padding(vertical = 8.dp),
                     )
                 }
+            }
+
+            // A plain one-off can be folded into its month's group; the note then goes away.
+            editor.original?.takeIf { it.groupableMonth != null }?.let { original ->
+                MoveToGroup(groups, onMove = { model.groupExpense(original, it) })
             }
 
             Button(

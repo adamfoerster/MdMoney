@@ -30,7 +30,12 @@ data class ReviewRow(
  * (a recurring bill or an income line) whose month grows by the line; without one it is a ledger
  * group, whose note for the line's month is found or created.
  */
-data class GroupChoice(val title: String, val noteId: String? = null)
+data class GroupChoice(val title: String, val noteId: String? = null, val standalone: Boolean = false) {
+    companion object {
+        /** Under no group at all: the line becomes a note of its own. */
+        val NONE = GroupChoice(title = "", standalone = true)
+    }
+}
 
 /** Everything an account holds that a statement line could be filed under. */
 data class AccountGroups(val notes: List<Expense> = emptyList()) {
@@ -91,6 +96,7 @@ object ImportPlanner {
         incomeTitle: String,
     ): List<ImportEntry> = rows.filter { it.selected && it.selectable }.map { row ->
         val title = when {
+            row.group?.standalone == true -> row.description.trim()
             row.group != null -> row.group.title
             row.isIncome -> incomeTitle
             else -> categoryTitle(row.category, categories) ?: uncategorizedTitle
@@ -103,6 +109,7 @@ object ImportPlanner {
             income = row.isIncome,
             entry = entryOf(row.tx, row.description),
             noteId = row.group?.noteId,
+            standalone = row.group?.standalone == true,
         )
     }
 

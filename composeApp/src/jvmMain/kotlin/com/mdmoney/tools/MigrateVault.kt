@@ -48,6 +48,7 @@ private class DryRun(private val delegate: VaultStorage) : VaultStorage by deleg
     override suspend fun write(account: String, fileName: String, content: String) = Unit
     override suspend fun writeRootFile(fileName: String, content: String) = Unit
     override suspend fun createAccount(name: String) = Unit
+    override suspend fun delete(account: String, fileName: String) = Unit
 }
 
 private fun fail(message: String): Nothing {

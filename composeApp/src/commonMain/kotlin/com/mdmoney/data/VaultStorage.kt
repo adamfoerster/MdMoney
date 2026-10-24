@@ -27,6 +27,9 @@ interface VaultStorage {
 
     suspend fun write(account: String, fileName: String, content: String)
 
+    /** Removes the note [fileName] from [account]; a note that isn't there is not an error. */
+    suspend fun delete(account: String, fileName: String)
+
     /** Reads a file directly at the vault root (e.g. an account metadata file), or null if absent. */
     suspend fun readRootFile(fileName: String): String?
 

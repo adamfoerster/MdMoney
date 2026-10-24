@@ -7,7 +7,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
@@ -18,6 +21,7 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import com.mdmoney.data.AppSettings
 import com.mdmoney.data.VaultStorage
+import com.mdmoney.domain.groupTitles
 import com.mdmoney.importer.ImportPlatform
 import com.mdmoney.ui.AppModel
 import com.mdmoney.ui.HomeTab
@@ -88,9 +92,23 @@ fun App(
                             ReinoTabBar(current = state.tab, onSelect = { model.selectTab(it) })
                         }
                     }
-                    state.editor?.let { EditExpenseSheet(model, it, state.categories) }
+                    state.editor?.let { editor ->
+                        val groups = editor.original?.let { o ->
+                            o.groupableMonth?.let { groupTitles(state.expenses, it, o.isIncome) }
+                        }.orEmpty()
+                        EditExpenseSheet(model, editor, state.categories, groups)
+                    }
                     state.oneOff?.let { OneOffSheet(model, it) }
-                    state.ledger?.let { LedgerSheet(model, it, state.categories) }
+                    state.ledger?.let {
+                        LedgerSheet(model, it, state.categories, groupTitles(state.expenses, it.month, it.income, except = it.title))
+                    }
+                    state.notice?.let {
+                        AlertDialog(
+                            onDismissRequest = { model.dismissNotice() },
+                            text = { Text(LocalStrings.current.cannotGroupNotice) },
+                            confirmButton = { TextButton(onClick = { model.dismissNotice() }) { Text("OK") } },
+                        )
+                    }
                 }
             }
         }

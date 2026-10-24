@@ -79,6 +79,19 @@ class ImportPlannerTest {
     }
 
     @Test
+    fun a_line_filed_under_no_group_becomes_a_standalone_entry_named_after_it() {
+        val rows = ImportPlanner.initialRows(lines, emptyMap())
+            .map { if (it.id == 0) it.copy(description = "Mercado Bella", group = GroupChoice.NONE) else it }
+        val entries = ImportPlanner.entries(rows, listOf(Category("food", "Alimentação")), "Importado", "Entradas")
+
+        val alone = entries.first()
+        assertTrue(alone.standalone)
+        assertEquals("Mercado Bella", alone.title)
+        assertEquals("food", alone.category, "the category still travels with it")
+        assertFalse(entries[1].standalone, "the others stay in their groups")
+    }
+
+    @Test
     fun groups_offered_are_recurring_and_ledger_notes_of_the_right_direction_and_year() {
         fun note(id: String, title: String, year: Int, ledger: Boolean, type: ExpenseType) =
             Expense.empty("a", year, type).copy(id = id, title = title, ledger = ledger)

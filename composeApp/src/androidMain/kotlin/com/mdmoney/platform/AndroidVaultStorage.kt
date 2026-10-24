@@ -67,6 +67,11 @@ class AndroidVaultStorage(
         context.contentResolver.openOutputStream(file.uri, "wt")!!.use { it.write(content.encodeToByteArray()) }
     }
 
+    override suspend fun delete(account: String, fileName: String) = withContext(Dispatchers.IO) {
+        accountDir(account)?.findFile(fileName)?.delete()
+        Unit
+    }
+
     override suspend fun readRootFile(fileName: String): String? = withContext(Dispatchers.IO) {
         val file = root()?.findFile(fileName)?.takeIf { it.isFile } ?: return@withContext null
         context.contentResolver.openInputStream(file.uri)?.use { it.readBytes().decodeToString() }

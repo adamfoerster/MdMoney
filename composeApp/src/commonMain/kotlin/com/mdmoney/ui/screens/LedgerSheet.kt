@@ -15,6 +15,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
@@ -51,6 +52,7 @@ import com.mdmoney.ui.components.HairlineDivider
 import com.mdmoney.ui.components.ReinoButton
 import com.mdmoney.ui.components.ReinoButtonVariant
 import com.mdmoney.ui.components.SectionBand
+import com.mdmoney.ui.components.chipRowScroll
 import com.mdmoney.ui.formatEntryDate
 import com.mdmoney.ui.theme.LocalReinoColors
 import com.mdmoney.ui.theme.LocalReinoType
@@ -66,7 +68,7 @@ private val OrdinalWidth = 30.dp
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun LedgerSheet(model: AppModel, ledger: Ledger, categories: List<Category> = emptyList()) {
+fun LedgerSheet(model: AppModel, ledger: Ledger, categories: List<Category> = emptyList(), groups: List<String> = emptyList()) {
     val s = LocalStrings.current
     val reino = LocalReinoColors.current
     val sep = LocalDecimalSeparator.current
@@ -186,6 +188,9 @@ fun LedgerSheet(model: AppModel, ledger: Ledger, categories: List<Category> = em
     editing?.let { entry ->
         EditLedgerEntryDialog(
             entry = entry,
+            groups = groups,
+            onMove = { model.moveLedgerEntry(entry, it); editing = null },
+            onUngroup = { model.ungroupLedgerEntry(entry); editing = null },
             onDismiss = { editing = null },
             onRemove = { model.removeLedgerEntry(entry); editing = null },
             onSave = { updated -> model.updateLedgerEntry(entry, updated); editing = null },
@@ -201,6 +206,9 @@ fun LedgerSheet(model: AppModel, ledger: Ledger, categories: List<Category> = em
 @Composable
 private fun EditLedgerEntryDialog(
     entry: LedgerEntry,
+    groups: List<String>,
+    onMove: (String) -> Unit,
+    onUngroup: () -> Unit,
     onDismiss: () -> Unit,
     onRemove: () -> Unit,
     onSave: (LedgerEntry) -> Unit,
@@ -217,7 +225,7 @@ private fun EditLedgerEntryDialog(
         onDismissRequest = onDismiss,
         title = { Text(s.editEntry, style = MaterialTheme.typography.titleLarge) },
         text = {
-            Column {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
                 OutlinedTextField(
                     value = date,
                     onValueChange = { date = it.filter { ch -> ch.isDigit() }.take(8) },
@@ -242,6 +250,7 @@ private fun EditLedgerEntryDialog(
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
                 )
+                MoveToGroup(groups, onMove = onMove, onOut = onUngroup)
                 TextButton(
                     onClick = onRemove,
                     modifier = Modifier.padding(top = 4.dp),
@@ -256,6 +265,33 @@ private fun EditLedgerEntryDialog(
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text(s.cancel) } },
     )
+}
+
+/**
+ * Moves a purchase between groups: a chip per group it could go to, one that takes it out of any
+ * group ([onOut], when it is in one), and a field for a group that doesn't exist yet.
+ */
+@Composable
+internal fun MoveToGroup(groups: List<String>, onMove: (String) -> Unit, onOut: (() -> Unit)? = null) {
+    val s = LocalStrings.current
+    var fresh by remember { mutableStateOf("") }
+    Text(
+        s.moveToGroup,
+        style = MaterialTheme.typography.labelLarge,
+        modifier = Modifier.padding(top = 10.dp, bottom = 4.dp),
+    )
+    Row(Modifier.chipRowScroll(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        onOut?.let { FilterChip(selected = false, onClick = it, label = { Text(s.groupNone) }) }
+        groups.forEach { g -> FilterChip(selected = false, onClick = { onMove(g) }, label = { Text(g) }) }
+    }
+    OutlinedTextField(
+        value = fresh,
+        onValueChange = { fresh = it },
+        label = { Text(s.newGroupLabel) },
+        singleLine = true,
+        modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+    )
+    TextButton(enabled = fresh.isNotBlank(), onClick = { onMove(fresh.trim()) }) { Text(s.moveToGroup) }
 }
 
 /** Mono, uppercase, faint — the ledger's column heads. */

@@ -60,6 +60,11 @@ class JvmVaultStorage(
         File(dir, fileName).writeText(content)
     }
 
+    override suspend fun delete(account: String, fileName: String) = withContext(Dispatchers.IO) {
+        File(File(requireRoot(), account), fileName).delete()
+        Unit
+    }
+
     override suspend fun readRootFile(fileName: String): String? = withContext(Dispatchers.IO) {
         File(requireRoot(), fileName).takeIf { it.isFile }?.readText()
     }

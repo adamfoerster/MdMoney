@@ -53,6 +53,23 @@ object ExpenseMapper {
         )
     }
 
+    /** Frontmatter keys this mapper reads or writes; anything else on a note is the user's own. */
+    private val managedKeys: Set<String> = buildSet {
+        addAll(listOf("title", "category", "account", "conta", "year", "type", "period", "subStatus", "projected"))
+        Month.ALL.forEach { m -> m.aliases.forEach { add(it); add("$it-paid") } }
+    }
+
+    /**
+     * True when removing [content]'s note would lose nothing the app can carry elsewhere: every
+     * frontmatter key is one it manages, and the body is empty or only the Date | Note | Amount
+     * table that records the purchases behind the amount.
+     */
+    fun holdsNothingToLose(content: String): Boolean {
+        val note = FrontmatterParser.parse(content)
+        if (note.entries.any { it.key !in managedKeys }) return false
+        return note.body.lines().all { it.isBlank() || it.trim().startsWith("|") }
+    }
+
     /**
      * Renders [updated] back to markdown. Pass the note's [originalContent] and the [original]
      * (as previously read) to preserve untouched numbers and unknown frontmatter; pass null for a

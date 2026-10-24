@@ -99,7 +99,11 @@ data class UiState(
     val openCategory: String? = null,
     /** False when the platform offers no statement import. */
     val canImport: Boolean = false,
+    /** Something the user asked for that could not be done, to be told once. */
+    val notice: Notice? = null,
 )
+
+enum class Notice { CANNOT_GROUP }
 
 /**
  * Single app-wide state holder. Plain class exposing a [StateFlow] and intent methods (no AndroidX
@@ -398,6 +402,31 @@ class AppModel(
         _state.update { it.copy(ledger = updated) }
         _state.value.selectedAccount?.let { refreshFromCache(it) }
     }
+
+    /** Moves a purchase of the open group into the group titled [toTitle] (made when new). */
+    fun moveLedgerEntry(entry: LedgerEntry, toTitle: String) = scope.launch {
+        val current = _state.value.ledger ?: return@launch
+        val moved = runCatching { repo.moveEntry(current, entry, toTitle) }.getOrNull() ?: return@launch
+        _state.update { it.copy(ledger = moved.first) }
+        _state.value.selectedAccount?.let { refreshFromCache(it) }
+    }
+
+    /** Takes a purchase out of the open group, as a note of its own. */
+    fun ungroupLedgerEntry(entry: LedgerEntry) = scope.launch {
+        val current = _state.value.ledger ?: return@launch
+        val result = runCatching { repo.ungroupEntry(current, entry) }.getOrNull() ?: return@launch
+        _state.update { it.copy(ledger = result.first) }
+        _state.value.selectedAccount?.let { refreshFromCache(it) }
+    }
+
+    /** Folds a plain one-off into the group titled [toTitle] of its month; says so when it can't. */
+    fun groupExpense(expense: Expense, toTitle: String) = scope.launch {
+        val moved = runCatching { repo.groupExpense(expense, toTitle) }.getOrNull()
+        _state.update { it.copy(editor = null, notice = if (moved == null) Notice.CANNOT_GROUP else null) }
+        _state.value.selectedAccount?.let { refreshFromCache(it) }
+    }
+
+    fun dismissNotice() = _state.update { it.copy(notice = null) }
 
     /** Add an income entry (salary, bonus); amounts are then entered per month like a variable bill. */
     fun openAddIncome() = _state.update { st ->

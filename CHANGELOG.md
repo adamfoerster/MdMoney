@@ -12,6 +12,19 @@ heading when you cut a release.
 
 ## [Unreleased]
 
+## [0.10.0] — 2026-10-21
+
+### Added
+
+- **Move a purchase into or out of a group.** In a group's purchase list, opening an entry now offers
+  the month's other groups (or a new one) to move it to, and "no group" to take it out as a note of
+  its own. Editing a plain one-off expense offers the reverse: fold it into one of its month's
+  groups. A note is only folded in when that loses nothing — a single-month one-off with no prose or
+  properties of its own — otherwise it is left untouched and the app says why. The date of a purchase
+  taken out is kept in a table in the new note, so it is still recognised as already imported.
+- **Statement review can file a line under "no group"**, importing it as a note of its own instead of
+  a row in a group. The group picker is now always shown on each line.
+
 ## [0.9.0] — 2026-10-12
 
 ### Changed

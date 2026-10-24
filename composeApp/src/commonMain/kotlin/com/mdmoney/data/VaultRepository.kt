@@ -3,6 +3,7 @@ package com.mdmoney.data
 import com.mdmoney.domain.Category
 import com.mdmoney.domain.Currency
 import com.mdmoney.domain.Expense
+import com.mdmoney.domain.ExpenseType
 import com.mdmoney.domain.Ledger
 import com.mdmoney.domain.LedgerEntry
 import com.mdmoney.domain.Month
@@ -141,7 +142,12 @@ class VaultRepository(
                 cache.upsertAll(listOf(updated))
                 plainNotes++
             }
-            ledgerLines += fresh.filter { it.noteId == null }
+            // Lines filed under no group each become a note of their own.
+            val alone = fresh.filter { it.standalone }
+            for (line in alone) {
+                writeStandalone(account, line.year, line.month, line.income, line.entry.note, line.category, line.entry)
+            }
+            ledgerLines += fresh.filter { it.noteId == null && !it.standalone }
             val groups = ledgerLines.groupBy { Ledger.idFor(it.year, it.month, it.title) }
             for ((id, group) in groups) {
                 val first = group.first()
@@ -162,8 +168,119 @@ class VaultRepository(
                 storage.write(account, "$id.md", LedgerMapper.write(existingContent, ledger, links))
                 cache.upsertAll(listOf(ledger.toExpense()))
             }
-            ImportResult(added = fresh.size, skipped = entries.size - fresh.size, notes = groups.size + plainNotes)
+            ImportResult(added = fresh.size, skipped = entries.size - fresh.size, notes = groups.size + plainNotes + alone.size)
         }
+    }
+
+    // --- moving a purchase into or out of a group ---
+
+    /**
+     * Moves [entry] from the group [from] into the group titled [toTitle] of the same month, which
+     * is created when the month has none by that name. Returns the two ledgers as saved, or null
+     * when the destination is [from] itself.
+     */
+    suspend fun moveEntry(from: Ledger, entry: LedgerEntry, toTitle: String): Pair<Ledger, Ledger>? = fileLock.withLock {
+        val id = Ledger.idFor(from.year, from.month, toTitle)
+        if (id == from.id || toTitle.isBlank()) return@withLock null
+        val source = from.copy(entries = from.entries.minusFirst(entry))
+        val existingContent = runCatching { storage.read(from.account, "$id.md") }.getOrNull()
+        val existing = existingContent?.let { LedgerMapper.read(id, from.account, it, from.year) }
+        val target = (
+            existing ?: from.copy(id = id, title = Ledger.sanitizeTitle(toTitle), entries = emptyList())
+            ).let { it.copy(entries = it.entries + entry) }
+        writeLedger(source)
+        writeLedger(target, existingContent)
+        source to target
+    }
+
+    /**
+     * Takes [entry] out of the group [from] and files it as a note of its own — an eventual expense
+     * (or income) in that month, already paid. The date stays in a table in the note's body, so the
+     * line is still recognised as imported. Returns the group as saved and the new note.
+     */
+    suspend fun ungroupEntry(from: Ledger, entry: LedgerEntry): Pair<Ledger, Expense> = fileLock.withLock {
+        val source = from.copy(entries = from.entries.minusFirst(entry))
+        writeLedger(source)
+        val note = writeStandalone(from.account, from.year, from.month, from.income, entry.note.ifBlank { from.title }, from.category, entry)
+        source to note
+    }
+
+    /**
+     * Folds the plain one-off [expense] into the group titled [toTitle] of its month and removes its
+     * note. Returns the group, or null — leaving the note exactly as it was — when the note isn't a
+     * single-month one-off or holds anything (prose, keys of its own) that the move would lose.
+     */
+    suspend fun groupExpense(expense: Expense, toTitle: String): Ledger? = fileLock.withLock {
+        val month = expense.groupableMonth ?: return@withLock null
+        val content = runCatching { storage.read(expense.account, "${expense.id}.md") }.getOrNull() ?: return@withLock null
+        if (!ExpenseMapper.holdsNothingToLose(content) || toTitle.isBlank()) return@withLock null
+
+        val amount = expense.amounts.getValue(month) ?: return@withLock null
+        val kept = LedgerMapper.tableEntries(content)
+        val entries = if (kept.isNotEmpty() && round(kept.sumOf { it.amount } * 100) == round(amount * 100)) {
+            kept
+        } else {
+            listOf(LedgerEntry(LedgerEntry.dateOf(expense.year, month.number, 1), expense.title, amount))
+        }
+        val id = Ledger.idFor(expense.year, month, toTitle)
+        val existingContent = runCatching { storage.read(expense.account, "$id.md") }.getOrNull()
+        val existing = existingContent?.let { LedgerMapper.read(id, expense.account, it, expense.year) }
+        val target = (
+            existing ?: Ledger(
+                id = id,
+                account = expense.account,
+                title = Ledger.sanitizeTitle(toTitle),
+                category = expense.category,
+                year = expense.year,
+                month = month,
+                entries = emptyList(),
+                income = expense.isIncome,
+            )
+            ).let { it.copy(entries = it.entries + entries) }
+        writeLedger(target, existingContent)
+        storage.delete(expense.account, "${expense.id}.md")
+        cache.deleteMissing(expense.account, cache.ids(expense.account).toSet() - expense.id)
+        target
+    }
+
+    private suspend fun writeLedger(ledger: Ledger, existingContent: String? = null): Ledger {
+        val current = existingContent ?: runCatching { storage.read(ledger.account, "${ledger.id}.md") }.getOrNull()
+        storage.write(ledger.account, "${ledger.id}.md", LedgerMapper.write(current, ledger, links))
+        cache.upsertAll(listOf(ledger.toExpense()))
+        return ledger
+    }
+
+    /** Writes one purchase as a note of its own; its name never collides with a note already there. */
+    private suspend fun writeStandalone(
+        account: String,
+        year: Int,
+        month: Month,
+        income: Boolean,
+        title: String,
+        category: String?,
+        entry: LedgerEntry,
+    ): Expense {
+        val taken = runCatching { storage.listNotes(account) }.getOrDefault(emptyList()).map { it.removeSuffix(".md") }.toSet()
+        val base = sanitize(title).ifBlank { "Despesa" }
+        var id = base
+        var n = 2
+        while (id in taken) id = "$base ${n++}"
+        val note = Expense.empty(account, year, if (income) ExpenseType.INCOME else ExpenseType.EVENTUAL).copy(
+            id = id,
+            title = title.trim().ifBlank { base },
+            category = category,
+            amounts = Month.ALL.associateWith { if (it == month) entry.amount else null },
+            paid = Month.ALL.associateWith { it == month },
+        )
+        val text = LedgerMapper.withAppendedRows(ExpenseMapper.write(null, null, note, links), listOf(entry))
+        storage.write(account, "$id.md", text)
+        cache.upsertAll(listOf(note))
+        return note
+    }
+
+    private fun <T> List<T>.minusFirst(item: T): List<T> {
+        val i = indexOf(item)
+        return if (i < 0) this else toMutableList().apply { removeAt(i) }
     }
 
     /** [this] with each line's amount added to its month, and those months marked paid/received. */

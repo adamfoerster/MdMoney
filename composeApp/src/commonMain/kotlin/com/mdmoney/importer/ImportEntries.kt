@@ -20,6 +20,8 @@ data class ImportEntry(
      * that note, whose month amount grows by the line instead of a ledger getting a row.
      */
     val noteId: String? = null,
+    /** Set when the user filed the line under no group: it becomes a note of its own. */
+    val standalone: Boolean = false,
 )
 
 /** What an import did: rows written, rows already in the vault (skipped), notes touched. */
