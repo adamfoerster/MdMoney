@@ -12,6 +12,47 @@ heading when you cut a release.
 
 ## [Unreleased]
 
+## [0.14.1] — 2026-10-26
+
+### Changed
+- The new one-off expense form no longer has a month picker: the amount goes into the month you are viewing (an existing one-off keeps its month).
+
+## [0.14.0] — 2026-10-25
+
+### Changed
+- The Annual tab is now a month strip (what each month spent) with the selected month's net, income and expenses below it, replacing the twelve-column grid. The strip ends with a Total item that shows each line's total over the year. Tap a line to edit it or open its ledger. No change to the vault format.
+
+## [0.14.0] — 2026-10-26
+
+### Changed
+- **New / edit expense redesigned**: name, a category button that opens a full category picker (search or create, most-used chips, all categories), the four kinds as radio cards, and a fields section that follows the kind. A fixed bill now chooses the months it repeats in (whole year or picked months, with the year's total), so it can start mid-year; a one-off asks for its amount and month. The old free-text "period" field is gone from the form, but a note's `period:` is kept as written. No change to the vault format.
+
+## [0.13.1] — 2026-10-25
+
+### Fixed
+- The gear icon in the navigation bar (and the calendar and eye icons) drew only half its shape, because the icon parser misread arc flags written without spaces.
+
+## [0.13.0] — 2026-10-25
+
+### Changed
+- **Accounts screen redesigned**: each account is a card with an initial avatar, its balance and the month's recurring bills left to pay (amber when something is due, green when all paid). A variable bill still without an amount asks for it right there and can only be paid once it has one. The bottom navigation now uses line icons with sentence-case labels, and also shows on the accounts screen (Annual and Reports wait for an open account). No change to the vault format.
+
+## [0.12.0] — 2026-10-25
+
+### Added
+- **The accounts list shows each account's current balance** and a collapsible list of the month's recurring bills not yet marked paid, with their total. Each bill has a check to mark it paid — amounts can't be edited from there.
+- **"Hide amounts" toggle** on the accounts list masks the balances and the recurring amounts. The choice is remembered. No change to the vault format.
+
+## [0.11.1] — 2026-10-25
+
+### Changed
+- Statement import review redesigned: In/Out totals in a card, each line as its own card, and the import button pinned at the bottom. Home (account), the expense-group sheet and Settings get the same treatment: cards for each section, a dark month switcher, action tiles, and a dark total card in the group sheet. No change to behaviour or the vault format.
+
+## [0.11.0] — 2026-10-25
+
+### Changed
+- Visual refresh with the Aldermoor design system (bank theme): ivory grounds, midnight-navy primary, teal for income, hairline borders and slightly softer corners, with Newsreader and IBM Plex Sans replacing Spectral and Hanken Grotesk. No change to the vault format.
+
 ## [0.10.0] — 2026-10-21
 
 ### Added

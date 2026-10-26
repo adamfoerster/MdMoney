@@ -13,17 +13,17 @@ import com.mdmoney.ui.theme.reinoTypography
 import com.mdmoney.ui.theme.rememberReinoTypefaces
 import com.mdmoney.ui.theme.toMaterialColorScheme
 
-// The brand is essentially square: 2px is the most a control ever gets.
+// Aldermoor is architectural, nearly square: 3px controls, 4px panels.
 private val ReinoShapes = Shapes(
     extraSmall = RoundedCornerShape(2.dp),
-    small = RoundedCornerShape(2.dp),
-    medium = RoundedCornerShape(2.dp),
-    large = RoundedCornerShape(0.dp),
+    small = RoundedCornerShape(3.dp),
+    medium = RoundedCornerShape(4.dp),
+    large = RoundedCornerShape(4.dp),
     extraLarge = RoundedCornerShape(0.dp),
 )
 
 /**
- * Reino Eterno theme. Light-only by design (warm paper); ignores the system dark setting because
+ * Aldermoor theme (bank). Light-only here (ivory); ignores the system dark setting because
  * the brand has no dark variant. Provides both the Material 3 mapping and the extended [ReinoColors]
  * and typefaces to the tree.
  */

@@ -19,4 +19,9 @@ interface AppSettings {
     fun importModel(): String?
 
     fun setImportModel(value: String?)
+
+    /** Whether balances and recurring amounts are masked on the accounts list. Off by default. */
+    fun hideAmounts(): Boolean = false
+
+    fun setHideAmounts(hidden: Boolean) {}
 }

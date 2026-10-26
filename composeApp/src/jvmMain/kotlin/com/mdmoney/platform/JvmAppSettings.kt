@@ -12,7 +12,11 @@ class JvmAppSettings(private val prefs: JvmPrefs) : AppSettings {
     override fun importModel(): String? = prefs.get(KEY_IMPORT_MODEL)
     override fun setImportModel(value: String?) = prefs.set(KEY_IMPORT_MODEL, value)
 
+    override fun hideAmounts(): Boolean = prefs.get(KEY_HIDE) == "true"
+    override fun setHideAmounts(hidden: Boolean) = prefs.set(KEY_HIDE, if (hidden) "true" else null)
+
     private companion object {
+        const val KEY_HIDE = "hideAmounts"
         const val KEY_LANG = "language"
         const val KEY_DECIMAL = "decimalSeparator"
         const val KEY_IMPORT_MODEL = "importModel"

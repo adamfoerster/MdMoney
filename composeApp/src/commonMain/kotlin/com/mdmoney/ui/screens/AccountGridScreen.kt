@@ -1,7 +1,7 @@
 package com.mdmoney.ui.screens
 
-import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -11,10 +11,12 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -27,306 +29,195 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
-import com.mdmoney.LocalStrings
 import com.mdmoney.LocalCurrencySymbol
 import com.mdmoney.LocalDecimalSeparator
+import com.mdmoney.LocalStrings
 import com.mdmoney.data.formatMoney
 import com.mdmoney.domain.Expense
 import com.mdmoney.domain.Month
 import com.mdmoney.ui.AppModel
 import com.mdmoney.ui.UiState
-import com.mdmoney.ui.components.Eyebrow
-import com.mdmoney.ui.components.HairlineDivider
 import com.mdmoney.ui.components.ReinoButton
 import com.mdmoney.ui.components.ReinoButtonVariant
-import com.mdmoney.ui.components.SectionBand
+import com.mdmoney.ui.monthDetail
+import com.mdmoney.ui.monthSpent
+import com.mdmoney.ui.valueIn
+import com.mdmoney.ui.theme.D
 import com.mdmoney.ui.theme.LocalReinoColors
-import com.mdmoney.ui.theme.LocalReinoType
+import com.mdmoney.ui.theme.importCard
 
-private val TitleWidth = 150.dp
-private val MonthWidth = 78.dp
-private val TotalWidth = 92.dp
-private val RowHeight = 48.dp
-
+/**
+ * The year at a glance: a strip of months with what each one spent, and the selected month's income
+ * and expenses beneath it. Editing happens where it always did — tapping a line opens its expense
+ * (or its ledger).
+ */
 @Composable
 fun AccountGridScreen(model: AppModel, state: UiState) {
     val s = LocalStrings.current
-    val reino = LocalReinoColors.current
-    val rows = state.expenses.filter { it.year == state.year }.sortedBy { it.title.lowercase() }
-    val hScroll = rememberScrollState()
-    var cell by remember { mutableStateOf<Pair<Expense, Month>?>(null) }
+    val sep = LocalDecimalSeparator.current
+    val cur = LocalCurrencySymbol.current
+    // null is the whole year: the strip's last item, each line then showing its total over the year.
+    var month by remember { mutableStateOf<Month?>(state.homeMonth) }
+    val detail = monthDetail(state.expenses, state.year, month)
+    val open: (Expense) -> Unit = { if (it.ledger) model.openLedger(it) else model.openEdit(it) }
 
-    // Mono figures use tighter tracking than mono labels.
-    val numberStyle = TextStyle(fontFamily = LocalReinoType.current.mono, fontSize = 12.sp, letterSpacing = 0.02.em)
-
-    Surface(Modifier.fillMaxSize()) {
-        Column(Modifier.fillMaxSize()) {
+    Surface(Modifier.fillMaxSize(), color = D.bg) {
+        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
             Row(
-                Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 ReinoButton("‹ ${s.accounts}", onClick = { model.back() }, variant = ReinoButtonVariant.Ghost)
                 Spacer(Modifier.weight(1f))
-                ReinoButton(s.addExpense, onClick = { model.openAdd() }, variant = ReinoButtonVariant.Ghost, trailingArrow = true)
+                Box(
+                    Modifier.height(40.dp).clip(RoundedCornerShape(999.dp)).background(D.dark)
+                        .clickable { model.openAdd() }.padding(horizontal = 14.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text("+  ${s.addExpense}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium, color = D.onDark)
+                }
             }
 
-            SectionBand(
-                title = state.selectedAccount ?: s.accounts,
-                number = state.year.toString(),
-                label = s.year,
-                modifier = Modifier.padding(horizontal = 16.dp),
-            )
-
-            if (state.availableYears.size > 1) {
-                Row(
-                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
-                        .padding(horizontal = 16.dp, vertical = 10.dp),
-                    horizontalArrangement = Arrangement.spacedBy(18.dp),
-                ) {
-                    state.availableYears.forEach { year ->
-                        val selected = year == state.year
+            Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
+                // --- Title + year ---
+                Row(verticalAlignment = Alignment.Bottom) {
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(s.annual.uppercase(), style = MaterialTheme.typography.labelMedium, color = D.soft)
                         Text(
-                            year.toString(),
-                            style = MaterialTheme.typography.labelLarge,
-                            color = if (selected) reino.brass else reino.inkFaint,
-                            modifier = Modifier.clickable { model.setYear(year) },
+                            state.selectedAccount ?: s.accounts,
+                            style = MaterialTheme.typography.displayMedium,
+                            color = D.ink,
                         )
                     }
-                }
-            } else {
-                Spacer(Modifier.height(6.dp))
-            }
-
-            when {
-                state.loading && rows.isEmpty() ->
-                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(color = reino.brass)
-                    }
-                rows.isEmpty() ->
-                    Box(Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.TopCenter) {
-                        Text(s.noExpenses, style = MaterialTheme.typography.bodyLarge, color = reino.inkSoft, textAlign = TextAlign.Center)
-                    }
-                else -> {
-                    val incomes = rows.filter { it.isIncome }
-                    val expenses = rows.filter { !it.isIncome }
-                    // A ledger's amount is the sum of its purchases, so both the title and the cell
-                    // open the ledger; there is no single value to edit here.
-                    val open: (Expense) -> Unit = { if (it.ledger) model.openLedger(it) else model.openEdit(it) }
-                    val openCell: (Expense, Month) -> Unit = { e, m ->
-                        if (e.ledger) model.openLedger(e) else cell = e to m
-                    }
-                    HeaderRow(hScroll)
-                    Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp)) {
-                        // Income and expenses are totalled apart, then reconciled by a net row —
-                        // summing them together would make the figure meaningless.
-                        if (incomes.isNotEmpty()) {
-                            GroupLabel(s.incomeSection)
-                            incomes.forEach { expense ->
-                                ExpenseRow(expense, hScroll, numberStyle, onTitle = { open(expense) }, onCell = { openCell(expense, it) })
-                            }
-                            TotalsRow(incomes, hScroll, numberStyle, s.total, reino.verdigris)
-                            Spacer(Modifier.height(20.dp))
+                    Row(
+                        Modifier.clip(RoundedCornerShape(999.dp)).background(D.field)
+                            .border(1.dp, D.fieldBorder, RoundedCornerShape(999.dp)),
+                    ) {
+                        state.availableYears.ifEmpty { listOf(state.year) }.forEach { year ->
+                            val on = year == state.year
+                            Text(
+                                year.toString(),
+                                style = MaterialTheme.typography.bodyMedium.copy(fontSize = 15.sp, fontFeatureSettings = "tnum"),
+                                fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal,
+                                color = if (on) D.ink else D.soft,
+                                modifier = Modifier.clickable { model.setYear(year) }.padding(horizontal = 14.dp, vertical = 10.dp),
+                            )
                         }
-                        if (expenses.isNotEmpty()) {
-                            if (incomes.isNotEmpty()) GroupLabel(s.expenseSection)
-                            expenses.forEach { expense ->
-                                ExpenseRow(expense, hScroll, numberStyle, onTitle = { open(expense) }, onCell = { openCell(expense, it) })
-                            }
-                            TotalsRow(expenses, hScroll, numberStyle, s.total, reino.brass)
-                        }
-                        if (incomes.isNotEmpty()) {
-                            Spacer(Modifier.height(20.dp))
-                            NetRow(incomes, expenses, hScroll, numberStyle)
-                        }
-                        Spacer(Modifier.height(24.dp))
                     }
                 }
+
+                if (state.loading && state.expenses.isEmpty()) {
+                    Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(color = LocalReinoColors.current.brass)
+                    }
+                    return@Column
+                }
+
+                // --- Month strip ---
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(s.expenseSection.uppercase(), style = MaterialTheme.typography.labelMedium, color = D.soft, modifier = Modifier.padding(start = 2.dp))
+                    Row(
+                        Modifier.horizontalScroll(rememberScrollState()).padding(bottom = 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        (Month.ALL + null).forEach { m ->
+                            val spent = monthSpent(state.expenses, state.year, m)
+                            val on = m == month
+                            Column(
+                                Modifier.width(92.dp).heightIn(min = 64.dp)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(if (on) D.dark else D.card)
+                                    .border(1.dp, if (on) D.dark else D.fieldBorder, RoundedCornerShape(12.dp))
+                                    .clickable { month = m }.padding(horizontal = 12.dp, vertical = 10.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp),
+                            ) {
+                                Text((m?.let { s.monthShort(it) } ?: s.total).uppercase(), style = MaterialTheme.typography.labelMedium, color = if (on) D.dim else D.soft)
+                                Text(
+                                    spent?.let { formatMoney(it, sep) } ?: "—",
+                                    style = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp, fontFeatureSettings = "tnum"),
+                                    fontWeight = if (spent == null) FontWeight.Normal else FontWeight.Medium,
+                                    color = when {
+                                        on -> D.onDark
+                                        spent == null -> Color(0xFF8A847A)
+                                        else -> D.ink
+                                    },
+                                    maxLines = 1,
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // --- Selected month ---
+                Column(Modifier.fillMaxWidth().importCard()) {
+                    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Text(month?.let { "${s.month(it)} ${state.year}" } ?: state.year.toString(), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold, color = D.ink)
+                            Text(s.net, style = MaterialTheme.typography.bodySmall, color = D.soft)
+                        }
+                        Text(
+                            (if (detail.net >= 0) "+" else "−") + formatMoney(kotlin.math.abs(detail.net), sep, cur),
+                            style = MaterialTheme.typography.bodyLarge.copy(fontSize = 24.sp, fontFeatureSettings = "tnum"),
+                            fontWeight = FontWeight.Medium,
+                            color = if (detail.net < 0) D.red else D.teal,
+                        )
+                    }
+                    if (detail.isEmpty) {
+                        Text(s.nothingThisMonth, style = MaterialTheme.typography.bodyMedium, color = D.soft, modifier = Modifier.padding(16.dp))
+                    }
+                    if (detail.income.isNotEmpty()) {
+                        MonthBand(s.incomeSection, "+" + formatMoney(detail.incomeTotal, sep, cur), D.teal)
+                        detail.income.forEach { DetailLine(it, month, D.teal) { open(it) } }
+                    }
+                    if (detail.expenses.isNotEmpty()) {
+                        MonthBand(s.expenseSection, "−" + formatMoney(detail.expenseTotal, sep, cur), D.ink)
+                        detail.expenses.forEach { DetailLine(it, month, D.ink) { open(it) } }
+                    }
+                }
+                Spacer(Modifier.height(12.dp))
             }
         }
     }
-
-    cell?.let { (expense, month) ->
-        CellEditDialog(
-            expense = expense,
-            month = month,
-            onDismiss = { cell = null },
-            onSave = { amount, paid -> model.updateCell(expense, month, amount, paid); cell = null },
-        )
-    }
 }
 
 @Composable
-private fun HeaderRow(hScroll: ScrollState) {
-    val reino = LocalReinoColors.current
-    val s = LocalStrings.current
-    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
-        HeaderCell("", TitleWidth, TextAlign.Start)
-        Row(Modifier.horizontalScroll(hScroll)) {
-            Month.ALL.forEach { HeaderCell(s.monthShort(it), MonthWidth, TextAlign.End) }
-            HeaderCell(s.total, TotalWidth, TextAlign.End)
-        }
-    }
-    HairlineDivider(Modifier.padding(horizontal = 16.dp), strong = true)
-}
-
-@Composable
-private fun HeaderCell(text: String, width: Dp, align: TextAlign) {
-    val reino = LocalReinoColors.current
-    Box(Modifier.width(width).height(34.dp).padding(horizontal = 8.dp), contentAlignment = Alignment.CenterStart) {
-        Text(
-            text.uppercase(),
-            style = MaterialTheme.typography.labelSmall,
-            color = reino.inkFaint,
-            textAlign = align,
-            modifier = Modifier.fillMaxWidth(),
-        )
-    }
-}
-
-@Composable
-private fun ExpenseRow(
-    expense: Expense,
-    hScroll: ScrollState,
-    numberStyle: TextStyle,
-    onTitle: () -> Unit,
-    onCell: (Month) -> Unit,
-) {
-    val reino = LocalReinoColors.current
-    val sep = LocalDecimalSeparator.current
-    val cur = LocalCurrencySymbol.current
-    Row(Modifier.fillMaxWidth().height(RowHeight)) {
-        Box(
-            Modifier.width(TitleWidth).height(RowHeight).clickable(onClick = onTitle).padding(horizontal = 8.dp),
-            contentAlignment = Alignment.CenterStart,
-        ) {
-            Text(
-                expense.title,
-                style = MaterialTheme.typography.bodyMedium,
-                color = reino.ink,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-        Row(Modifier.horizontalScroll(hScroll)) {
-            Month.ALL.forEach { month ->
-                MoneyCell(expense.amount(month), expense.isPaid(month), expense.isIncome, numberStyle) { onCell(month) }
-            }
-            Box(Modifier.width(TotalWidth).height(RowHeight).padding(horizontal = 8.dp), contentAlignment = Alignment.CenterEnd) {
-                Text(formatMoney(expense.total, sep, cur), style = numberStyle.copy(fontWeight = FontWeight.SemiBold), color = reino.ink, maxLines = 1, softWrap = false)
-            }
-        }
-    }
-    HairlineDivider()
-}
-
-@Composable
-private fun MoneyCell(amount: Double?, paid: Boolean, isIncome: Boolean, numberStyle: TextStyle, onClick: () -> Unit) {
-    val reino = LocalReinoColors.current
-    val sep = LocalDecimalSeparator.current
-    val cur = LocalCurrencySymbol.current
-    val hasValue = amount != null && amount != 0.0
-    // A settled cell is tinted: brass for a paid bill, verdigris for income received.
-    val accent = if (isIncome) reino.verdigris else reino.brass
-    val bg = if (paid && hasValue) (if (isIncome) reino.verdigrisTint else reino.brassTint) else reino.paper
-    val color = when {
-        paid && hasValue -> accent
-        hasValue -> reino.ink
-        else -> reino.inkFaint // empty or zero
-    }
-    Box(
-        Modifier.width(MonthWidth).height(RowHeight).background(bg).clickable(onClick = onClick).padding(horizontal = 8.dp),
-        contentAlignment = Alignment.CenterEnd,
+private fun MonthBand(label: String, total: String, color: Color) {
+    Row(
+        Modifier.fillMaxWidth().background(D.bg).padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.Bottom,
     ) {
-        Text(if (hasValue) formatMoney(amount!!, sep, cur) else "·", style = numberStyle, color = color, maxLines = 1, softWrap = false)
+        Text(label.uppercase(), style = MaterialTheme.typography.labelMedium, color = D.soft, modifier = Modifier.weight(1f))
+        Text(
+            total,
+            style = MaterialTheme.typography.bodyMedium.copy(fontFeatureSettings = "tnum"),
+            fontWeight = FontWeight.SemiBold,
+            color = color,
+            textAlign = TextAlign.End,
+        )
     }
 }
 
-/** Section heading inside the grid (income vs expenses). */
 @Composable
-private fun GroupLabel(text: String) {
-    Box(Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 6.dp)) {
-        Eyebrow(text)
-    }
-}
-
-/** Net per month: income minus expenses — what the year actually adds up to. */
-@Composable
-private fun NetRow(incomes: List<Expense>, expenses: List<Expense>, hScroll: ScrollState, numberStyle: TextStyle) {
-    val reino = LocalReinoColors.current
-    val s = LocalStrings.current
+private fun DetailLine(expense: Expense, month: Month?, color: Color, onClick: () -> Unit) {
     val sep = LocalDecimalSeparator.current
     val cur = LocalCurrencySymbol.current
-    fun netOf(month: Month) =
-        incomes.sumOf { it.amount(month) ?: 0.0 } - expenses.sumOf { it.amount(month) ?: 0.0 }
-
-    HairlineDivider(strong = true)
-    Row(Modifier.fillMaxWidth().height(RowHeight)) {
-        Box(Modifier.width(TitleWidth).height(RowHeight).padding(horizontal = 8.dp), contentAlignment = Alignment.CenterStart) {
-            Text(s.net.uppercase(), style = MaterialTheme.typography.labelLarge, color = reino.ink)
-        }
-        Row(Modifier.horizontalScroll(hScroll)) {
-            Month.ALL.forEach { month ->
-                val net = netOf(month)
-                Box(Modifier.width(MonthWidth).height(RowHeight).padding(horizontal = 8.dp), contentAlignment = Alignment.CenterEnd) {
-                    Text(
-                        if (net == 0.0) "" else formatMoney(net, sep, cur),
-                        style = numberStyle.copy(fontWeight = FontWeight.SemiBold),
-                        color = if (net < 0.0) reino.brassDeep else reino.verdigris,
-                        maxLines = 1,
-                        softWrap = false,
-                    )
-                }
-            }
-            val grand = incomes.sumOf { it.total } - expenses.sumOf { it.total }
-            Box(Modifier.width(TotalWidth).height(RowHeight).padding(horizontal = 8.dp), contentAlignment = Alignment.CenterEnd) {
-                Text(
-                    formatMoney(grand, sep, cur),
-                    style = numberStyle.copy(fontWeight = FontWeight.Bold),
-                    color = if (grand < 0.0) reino.brassDeep else reino.verdigris,
-                    maxLines = 1,
-                    softWrap = false,
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun TotalsRow(
-    rows: List<Expense>,
-    hScroll: ScrollState,
-    numberStyle: TextStyle,
-    label: String,
-    accent: Color,
-) {
-    val reino = LocalReinoColors.current
-    val sep = LocalDecimalSeparator.current
-    val cur = LocalCurrencySymbol.current
-    HairlineDivider(strong = true)
-    Row(Modifier.fillMaxWidth().height(RowHeight)) {
-        Box(Modifier.width(TitleWidth).height(RowHeight).padding(horizontal = 8.dp), contentAlignment = Alignment.CenterStart) {
-            Text(label.uppercase(), style = MaterialTheme.typography.labelLarge, color = reino.ink)
-        }
-        Row(Modifier.horizontalScroll(hScroll)) {
-            Month.ALL.forEach { month ->
-                val sum = rows.sumOf { it.amount(month) ?: 0.0 }
-                Box(Modifier.width(MonthWidth).height(RowHeight).padding(horizontal = 8.dp), contentAlignment = Alignment.CenterEnd) {
-                    Text(if (sum == 0.0) "" else formatMoney(sum, sep, cur), style = numberStyle.copy(fontWeight = FontWeight.SemiBold), color = reino.ink, maxLines = 1, softWrap = false)
-                }
-            }
-            val grand = rows.sumOf { it.total }
-            Box(Modifier.width(TotalWidth).height(RowHeight).padding(horizontal = 8.dp), contentAlignment = Alignment.CenterEnd) {
-                Text(formatMoney(grand, sep, cur), style = numberStyle.copy(fontWeight = FontWeight.Bold), color = accent, maxLines = 1, softWrap = false)
-            }
-        }
+    Box(Modifier.fillMaxWidth().height(1.dp).background(D.rule))
+    Row(
+        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(expense.title, style = MaterialTheme.typography.bodyMedium.copy(fontSize = 15.sp), color = D.ink, maxLines = 2, modifier = Modifier.weight(1f))
+        Text(
+            formatMoney(expense.valueIn(month), sep, cur),
+            style = MaterialTheme.typography.bodyMedium.copy(fontSize = 15.sp, fontFeatureSettings = "tnum"),
+            color = color,
+        )
     }
 }

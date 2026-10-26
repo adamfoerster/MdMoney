@@ -278,9 +278,9 @@ around the table survives, and a link title tuned in Obsidian is never stamped b
 
 ## Design
 
-The UI follows the **Reino Eterno** design system — a warm archival/editorial look: parchment
-background, warm ink, a single brass accent; Spectral (serif titles), Hanken Grotesk (sans body),
-IBM Plex Mono (uppercase tracked labels and numbers); square corners and hairline rules instead of
+The UI follows the **Aldermoor** design system (bank theme) — ivory grounds, midnight-navy primary,
+teal for income; Newsreader (serif titles), IBM Plex Sans (body), IBM Plex Mono (uppercase tracked
+labels and numbers); near-square corners and hairline rules instead of
 shadows. It is light-only by design. The three typefaces are bundled under
 `composeApp/src/commonMain/composeResources/font/` (all OFL-licensed via Google Fonts). Tokens live
 in `ui/theme/` (`Colors.kt`, `Type.kt`) and the reusable motifs (eyebrow, section band, index row,

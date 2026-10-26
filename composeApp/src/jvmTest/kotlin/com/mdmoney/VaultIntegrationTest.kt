@@ -16,23 +16,63 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
- * End-to-end over the real Nubank vault files: reads them through the storage + parser + mapper,
+ * End-to-end over a vault built in a temp folder: reads it through the storage + parser + mapper,
  * writes a change back, and checks the on-disk result preserves unknown frontmatter and migrates
- * the legacy `fev` key to `feb`.
+ * the legacy `fev` key to `feb`. Everything is generated here, so the tests need nothing from the
+ * user's own vault or from files outside the repo.
  */
 class VaultIntegrationTest {
 
-    private fun projectRoot(): File = File(System.getProperty("mdmoney.projectRoot") ?: ".")
+    /**
+     * Writes 19 notes into [account]: `Contador` carries what the migration and preservation
+     * checks need (legacy `fev` keys, unknown frontmatter, prose body), and 18 plain bills pad
+     * the account out to a realistic size. Every note declares `conta: Nubank`.
+     */
+    private fun writeFixtureNotes(account: File) {
+        account.mkdirs()
+        File(account, "Collegato - Contador.md").writeText(
+            """
+            ---
+            title: Contador
+            category: servicos
+            conta: Nubank
+            year: 2026
+            type: recurring-fixed
+            billing_cycle: monthly
+            renewal_date: 2026-05-04
+            jan: 390
+            jan-paid: true
+            fev: 390
+            fev-paid: true
+            mar: 390
+            mar-paid: false
+            aug: 390
+            aug-paid: false
+            ---
+            Notes the app doesn't understand must survive a save.
+            """.trimIndent() + "\n",
+        )
+        (1..18).forEach { n ->
+            File(account, "Bill %02d.md".format(n)).writeText(
+                """
+                ---
+                title: Bill %02d
+                conta: Nubank
+                year: 2026
+                type: recurring-fixed
+                jan: %d
+                jan-paid: true
+                feb: %d
+                feb-paid: false
+                ---
+                """.trimIndent().format(n, n * 10, n * 10) + "\n",
+            )
+        }
+    }
 
-    private fun makeVaultWithNubank(): File {
-        val nubankSrc = File(projectRoot(), "nubank")
-        // An empty folder passes isDirectory but copies nothing, turning a missing fixture into a
-        // baffling "expected 19 but was 0" downstream — so demand the notes themselves.
-        val notes = nubankSrc.listFiles { f -> f.name.endsWith(".md") }.orEmpty()
-        check(notes.isNotEmpty()) { "no .md fixture notes found in ${nubankSrc.absolutePath}" }
+    private fun makeVaultWithNubank(folder: String = "Nubank"): File {
         val vault = Files.createTempDirectory("mdmoney-vault").toFile()
-        val account = File(vault, "Nubank").apply { mkdirs() }
-        notes.forEach { src -> src.copyTo(File(account, src.name), overwrite = true) }
+        writeFixtureNotes(File(vault, folder))
         return vault
     }
 
@@ -120,11 +160,8 @@ class VaultIntegrationTest {
     fun cache_keys_on_folder_name_not_conta_frontmatter() = runBlocking<Unit> {
         // Folder is lowercase `nubank` while every note declares `conta: Nubank`. The cache must key
         // on the folder (what the app lists and looks up), or the account paints empty.
-        val notes = File(projectRoot(), "nubank").listFiles { f -> f.name.endsWith(".md") }.orEmpty()
-        check(notes.isNotEmpty()) { "no .md fixture notes found in ${projectRoot()}/nubank" }
-        val vault = Files.createTempDirectory("mdmoney-case").toFile()
-        val account = File(vault, "nubank").apply { mkdirs() }
-        notes.forEach { src -> src.copyTo(File(account, src.name), overwrite = true) }
+        val vault = makeVaultWithNubank(folder = "nubank")
+        val account = File(vault, "nubank")
 
         val storage = JvmVaultStorage(JvmPrefs(), vault)
         val repo = VaultRepository(storage, CacheDb(":memory:"))
@@ -285,6 +322,8 @@ class VaultIntegrationTest {
             feb-paid: false
             mar: 89.13
             mar-paid: false
+            aug: 390
+            aug-paid: false
             ---
             """.trimIndent() + "\n",
         )

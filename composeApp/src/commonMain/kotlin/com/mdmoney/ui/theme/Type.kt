@@ -5,23 +5,21 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontVariation
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import com.mdmoney.resources.Res
-import com.mdmoney.resources.hanken_grotesk_bold
-import com.mdmoney.resources.hanken_grotesk_medium
-import com.mdmoney.resources.hanken_grotesk_regular
-import com.mdmoney.resources.hanken_grotesk_semibold
 import com.mdmoney.resources.ibm_plex_mono_medium
+import com.mdmoney.resources.ibm_plex_sans_medium
+import com.mdmoney.resources.ibm_plex_sans_regular
+import com.mdmoney.resources.ibm_plex_sans_semibold
+import com.mdmoney.resources.newsreader_variable
 import com.mdmoney.resources.ibm_plex_mono_regular
 import com.mdmoney.resources.ibm_plex_mono_semibold
-import com.mdmoney.resources.spectral_medium
-import com.mdmoney.resources.spectral_regular
-import com.mdmoney.resources.spectral_semibold
 import org.jetbrains.compose.resources.Font
 
-/** The three brand typefaces: Spectral (serif), Hanken Grotesk (sans), IBM Plex Mono (labels). */
+/** The three brand typefaces: Newsreader (serif), IBM Plex Sans (sans), IBM Plex Mono (labels). */
 data class ReinoTypefaces(val serif: FontFamily, val sans: FontFamily, val mono: FontFamily)
 
 val LocalReinoType = staticCompositionLocalOf<ReinoTypefaces> {
@@ -34,15 +32,15 @@ val LabelTracking = 0.14.em
 @Composable
 fun rememberReinoTypefaces(): ReinoTypefaces {
     val serif = FontFamily(
-        Font(Res.font.spectral_regular, FontWeight.Normal),
-        Font(Res.font.spectral_medium, FontWeight.Medium),
-        Font(Res.font.spectral_semibold, FontWeight.SemiBold),
+        Font(Res.font.newsreader_variable, FontWeight.Normal, variationSettings = FontVariation.Settings(FontVariation.weight(400))),
+        Font(Res.font.newsreader_variable, FontWeight.Medium, variationSettings = FontVariation.Settings(FontVariation.weight(500))),
+        Font(Res.font.newsreader_variable, FontWeight.SemiBold, variationSettings = FontVariation.Settings(FontVariation.weight(600))),
     )
     val sans = FontFamily(
-        Font(Res.font.hanken_grotesk_regular, FontWeight.Normal),
-        Font(Res.font.hanken_grotesk_medium, FontWeight.Medium),
-        Font(Res.font.hanken_grotesk_semibold, FontWeight.SemiBold),
-        Font(Res.font.hanken_grotesk_bold, FontWeight.Bold),
+        Font(Res.font.ibm_plex_sans_regular, FontWeight.Normal),
+        Font(Res.font.ibm_plex_sans_medium, FontWeight.Medium),
+        Font(Res.font.ibm_plex_sans_semibold, FontWeight.SemiBold),
+        Font(Res.font.ibm_plex_sans_semibold, FontWeight.Bold),
     )
     val mono = FontFamily(
         Font(Res.font.ibm_plex_mono_regular, FontWeight.Normal),

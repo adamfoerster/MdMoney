@@ -22,6 +22,7 @@ import androidx.compose.ui.Modifier
 import com.mdmoney.data.AppSettings
 import com.mdmoney.data.VaultStorage
 import com.mdmoney.domain.groupTitles
+import com.mdmoney.ui.mostUsedCategories
 import com.mdmoney.importer.ImportPlatform
 import com.mdmoney.ui.AppModel
 import com.mdmoney.ui.HomeTab
@@ -96,7 +97,12 @@ fun App(
                         val groups = editor.original?.let { o ->
                             o.groupableMonth?.let { groupTitles(state.expenses, it, o.isIncome) }
                         }.orEmpty()
-                        EditExpenseSheet(model, editor, state.categories, groups)
+                        EditExpenseSheet(
+                            model, editor, state.categories, groups,
+                            accountTitle = state.accountTitle ?: state.selectedAccount.orEmpty(),
+                            year = state.year,
+                            mostUsed = mostUsedCategories(state.expenses),
+                        )
                     }
                     state.oneOff?.let { OneOffSheet(model, it) }
                     state.ledger?.let {

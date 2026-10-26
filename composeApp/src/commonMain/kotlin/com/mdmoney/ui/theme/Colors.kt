@@ -6,9 +6,9 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 
 /**
- * The Reino Eterno palette: a warm archival scheme — aged paper, warm near-black ink, and a single
- * bronze/ochre accent. No pure white, no pure black. The brand is light-only, so there is no dark
- * variant; depth is drawn with hairline rules rather than shadow.
+ * The Aldermoor "bank" theme: ivory grounds, midnight-navy primary and ink, hairline rules. Field
+ * names are kept from the earlier palette: [brass*] now carry the navy primary, [verdigris*] the
+ * success teal used for income. Light-only; depth is drawn with hairline rules rather than shadow.
  */
 data class ReinoColors(
     val paper: Color,
@@ -31,22 +31,22 @@ data class ReinoColors(
 )
 
 val ReinoPalette = ReinoColors(
-    paper = Color(0xFFF3EAD9),
-    paperDeep = Color(0xFFEDE2CD),
-    paperEdge = Color(0xFFE6DABF),
-    ink = Color(0xFF241E16),
-    inkSoft = Color(0xFF5B5142),
-    inkFaint = Color(0xFF8A7F6D),
-    brass = Color(0xFF8B6B38),
-    brassDeep = Color(0xFF6F5429),
-    brassBand = Color(0xFF927540),
-    brassTint = Color(0x1A8B6B38),
-    verdigris = Color(0xFF3F6B54),
-    verdigrisTint = Color(0x1A3F6B54),
-    line = Color(0x29241E16),
-    lineStrong = Color(0x52241E16),
-    lineOnBrass = Color(0x47F3EAD9),
-    onBrass = Color(0xFFF3EAD9),
+    paper = Color(0xFFF7F2E8),
+    paperDeep = Color(0xFFEFE8DA),
+    paperEdge = Color(0xFFE4DAC6),
+    ink = Color(0xFF161B26),
+    inkSoft = Color(0xFF5A5F6B),
+    inkFaint = Color(0xFF868B96),
+    brass = Color(0xFF111A2B),
+    brassDeep = Color(0xFF1B2840),
+    brassBand = Color(0xFF111A2B),
+    brassTint = Color(0xFFE1E4EA),
+    verdigris = Color(0xFF1F5659),
+    verdigrisTint = Color(0xFFDDEBEA),
+    line = Color(0xFFD9D6CF),
+    lineStrong = Color(0xFF868B96),
+    lineOnBrass = Color(0x47FCFAF5),
+    onBrass = Color(0xFFFCFAF5),
 )
 
 val LocalReinoColors = staticCompositionLocalOf { ReinoPalette }
@@ -72,6 +72,6 @@ fun ReinoColors.toMaterialColorScheme(): ColorScheme = lightColorScheme(
     surfaceContainerHighest = paperEdge,
     outline = lineStrong,
     outlineVariant = line,
-    error = Color(0xFF8B3A2E),
+    error = Color(0xFFA02D22),
     onError = onBrass,
 )

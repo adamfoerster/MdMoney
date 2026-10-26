@@ -36,6 +36,19 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import com.mdmoney.LocalCurrencySymbol
+import com.mdmoney.ui.theme.importCard
+import com.mdmoney.ui.theme.box
+import com.mdmoney.ui.theme.D
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.border
 import com.mdmoney.LocalDecimalSeparator
 import com.mdmoney.LocalStrings
 import com.mdmoney.data.formatInput
@@ -73,74 +86,87 @@ fun HomeScreen(model: AppModel, state: UiState) {
     val month = state.homeMonth
     val lines = monthLines(state.expenses, state.year, month)
 
-    Surface(Modifier.fillMaxSize()) {
+    Surface(Modifier.fillMaxSize(), color = D.bg) {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-            // --- Header: switch account + balance ---
-            Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp)) {
-                Spacer(Modifier.height(20.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    ReinoButton("‹ ${s.accounts}", onClick = { model.switchAccount() }, variant = ReinoButtonVariant.Ghost)
-                    Spacer(Modifier.weight(1f))
-                    Eyebrow(state.year.toString(), color = reino.inkFaint)
-                }
-                Spacer(Modifier.height(18.dp))
-                Eyebrow("${state.accountTitle ?: state.selectedAccount ?: ""} · ${s.balance}")
-                Spacer(Modifier.height(6.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        state.balance?.let { formatMoney(it, sep, cur) } ?: "—",
-                        style = MaterialTheme.typography.displayMedium,
-                        color = if ((state.balance ?: 0.0) < 0.0) reino.brassDeep else reino.ink,
-                        modifier = Modifier.weight(1f),
-                    )
-                    ReinoButton(s.editAccount, onClick = { editAccount = true }, variant = ReinoButtonVariant.Ghost)
-                }
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    if (state.initialBalance != null) "${s.initialBalance}: ${formatMoney(state.initialBalance, sep, cur)}" else s.setInitialBalance,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = reino.brass,
-                    modifier = Modifier.clickable { editBalance = true }.padding(vertical = 4.dp),
-                )
-                Spacer(Modifier.height(20.dp))
+            // --- App bar: back to the accounts, edit ---
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                ReinoButton("‹ ${s.accounts}", onClick = { model.switchAccount() }, variant = ReinoButtonVariant.Ghost)
+                Spacer(Modifier.weight(1f))
+                ReinoButton(s.editAccount, onClick = { editAccount = true }, variant = ReinoButtonVariant.Ghost)
             }
+            Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
+                // --- Title, currency pill, balance ---
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text(
+                            state.accountTitle ?: state.selectedAccount ?: "",
+                            style = MaterialTheme.typography.displayMedium,
+                            color = D.ink,
+                            modifier = Modifier.weight(1f, fill = false),
+                        )
+                        Text(
+                            state.currency.code,
+                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
+                            fontWeight = FontWeight.Medium,
+                            color = Color(0xFF463A6B),
+                            modifier = Modifier.clip(RoundedCornerShape(999.dp)).background(D.accountBg).padding(horizontal = 10.dp, vertical = 3.dp),
+                        )
+                    }
+                    if (state.initialBalance == null) {
+                        Row(
+                            Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(D.field)
+                                .dashedBorder().clickable { editBalance = true }.padding(horizontal = 14.dp, vertical = 12.dp).height(36.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            Text("+", style = MaterialTheme.typography.titleMedium, color = D.ink)
+                            Text(s.setInitialBalance, style = MaterialTheme.typography.bodyMedium.copy(fontSize = 15.sp), fontWeight = FontWeight.Medium, color = D.ink)
+                        }
+                    } else {
+                        Column(Modifier.fillMaxWidth().importCard().clickable { editBalance = true }.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(s.balance.uppercase(), style = MaterialTheme.typography.labelSmall, color = D.soft)
+                            Text(
+                                state.balance?.let { formatMoney(it, sep, cur) } ?: "—",
+                                style = MaterialTheme.typography.bodyLarge.copy(fontSize = 26.sp, fontFeatureSettings = "tnum"),
+                                fontWeight = FontWeight.Medium,
+                                color = if ((state.balance ?: 0.0) < 0.0) D.red else D.ink,
+                            )
+                            Text(
+                                "${s.initialBalance}: ${formatMoney(state.initialBalance, sep, cur)}",
+                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp),
+                                color = D.soft,
+                            )
+                        }
+                    }
+                }
 
-            MonthStepper(month, s.month(month), state.year) { model.setHomeMonth(it) }
+                MonthStepper(month, s.month(month), state.year) { model.setHomeMonth(it) }
 
-            Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp)) {
-                Spacer(Modifier.height(8.dp))
                 if (lines.isEmpty) {
-                    Eyebrow(s.thisMonth)
                     Text(
                         s.nothingThisMonth,
                         style = MaterialTheme.typography.bodyLarge,
-                        color = reino.inkSoft,
-                        modifier = Modifier.padding(vertical = 24.dp),
+                        color = D.soft,
+                        modifier = Modifier.padding(vertical = 12.dp),
                     )
                 } else {
-                    Section(s.incomeSection, lines.income, month, reino.verdigris, model, state.categories)
-                    Section(s.recurringSection, lines.recurring, month, reino.ink, model, state.categories)
-                    Section(s.eventualSection, lines.eventual, month, reino.ink, model, state.categories)
+                    Section(s.incomeSection, lines.income, month, D.teal, model, state.categories)
+                    Section(s.recurringSection, lines.recurring, month, D.ink, model, state.categories)
+                    Section(s.eventualSection, lines.eventual, month, D.ink, model, state.categories)
                 }
-                Spacer(Modifier.height(24.dp))
-                ReinoButton(s.addOneOff, onClick = { model.openAddOneOff() }, trailingArrow = true)
-                Spacer(Modifier.height(10.dp))
-                ReinoButton(
-                    s.addIncome,
-                    onClick = { model.openAddIncome() },
-                    variant = ReinoButtonVariant.Secondary,
-                    trailingArrow = true,
-                )
-                if (state.canImport) {
-                    Spacer(Modifier.height(10.dp))
-                    ReinoButton(
-                        s.importStatement,
-                        onClick = { model.openImport() },
-                        variant = ReinoButtonVariant.Secondary,
-                        trailingArrow = true,
-                    )
+
+                // --- Actions ---
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ActionTile(s.addOneOff, dark = true, modifier = Modifier.weight(1f)) { model.openAddOneOff() }
+                    ActionTile(s.addIncome, dark = false, modifier = Modifier.weight(1f)) { model.openAddIncome() }
+                    if (state.canImport) {
+                        ActionTile(s.importStatement, dark = false, modifier = Modifier.weight(1f)) { model.openImport() }
+                    }
                 }
-                Spacer(Modifier.height(28.dp))
+                Spacer(Modifier.height(12.dp))
             }
         }
     }
@@ -163,6 +189,29 @@ fun HomeScreen(model: AppModel, state: UiState) {
     }
 }
 
+@Composable
+private fun ActionTile(label: String, dark: Boolean, modifier: Modifier, onClick: () -> Unit) {
+    Box(
+        modifier.height(76.dp)
+            .box(if (dark) D.dark else D.card, if (dark) D.dark else D.fieldBorder, 12)
+            .clickable(onClick = onClick).padding(horizontal = 6.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            label,
+            style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp, lineHeight = 17.sp),
+            fontWeight = FontWeight.Medium,
+            color = if (dark) D.onDark else D.ink,
+            textAlign = TextAlign.Center,
+        )
+    }
+}
+
+private fun Modifier.dashedBorder(): Modifier = drawBehind {
+    val stroke = Stroke(1.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(5.dp.toPx(), 4.dp.toPx())))
+    drawRoundRect(Color(0xFFB8AE9A), style = stroke, cornerRadius = CornerRadius(12.dp.toPx()))
+}
+
 /**
  * One labelled block of the month's lines, with the block's own total for the month. Renders nothing
  * when it has no lines, so an account without income (or without any one-off yet) shows no empty
@@ -178,47 +227,47 @@ private fun Section(
     categories: List<Category>,
 ) {
     if (rows.isEmpty()) return
-    val reino = LocalReinoColors.current
     val sep = LocalDecimalSeparator.current
     val cur = LocalCurrencySymbol.current
     val subtotal = rows.sumOf { it.amount(month) ?: 0.0 }
 
-    Spacer(Modifier.height(14.dp))
-    Row(Modifier.fillMaxWidth().padding(bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-        Eyebrow(label)
-        Spacer(Modifier.weight(1f))
-        Text(
-            formatMoney(subtotal, sep, cur),
-            style = TextStyle(
-                fontFamily = LocalReinoType.current.mono,
-                fontSize = 12.sp,
-                letterSpacing = 0.02.em,
-                textAlign = TextAlign.End,
-            ),
-            color = accent,
-            // The same column the rows below use, so the block's sum sits over its own figures.
-            modifier = Modifier.width(AmountColumn).reinoFieldInset(),
-        )
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 2.dp), verticalAlignment = Alignment.Top) {
+            Text(label.uppercase(), style = MaterialTheme.typography.labelMedium.copy(fontSize = 12.sp), color = D.soft, modifier = Modifier.weight(1f))
+            Text(
+                formatMoney(subtotal, sep, cur),
+                style = MaterialTheme.typography.bodyMedium.copy(fontFeatureSettings = "tnum"),
+                fontWeight = FontWeight.Medium,
+                color = accent,
+            )
+        }
+        Column(Modifier.fillMaxWidth().importCard()) {
+            rows.forEachIndexed { i, row ->
+                if (i > 0) Box(Modifier.fillMaxWidth().height(1.dp).background(D.rule))
+                BillRow(model, row, month, categories)
+            }
+        }
     }
-    HairlineDivider(strong = true)
-    rows.forEach { BillRow(model, it, month, categories) }
 }
 
 @Composable
 private fun MonthStepper(month: Month, label: String, year: Int, onSelect: (Month) -> Unit) {
-    val reino = LocalReinoColors.current
     fun shift(delta: Int) {
         val n = ((month.number - 1 + delta + 12) % 12) + 1
         onSelect(Month.ALL.first { it.number == n })
     }
     Row(
-        Modifier.fillMaxWidth().background(reino.brassBand).padding(horizontal = 20.dp, vertical = 14.dp),
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(D.dark).padding(4.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
-        Text("‹", style = MaterialTheme.typography.titleLarge, color = reino.onBrass, modifier = Modifier.clickable { shift(-1) }.padding(horizontal = 8.dp))
-        Text("$label $year".uppercase(), style = MaterialTheme.typography.labelLarge, color = reino.onBrass)
-        Text("›", style = MaterialTheme.typography.titleLarge, color = reino.onBrass, modifier = Modifier.clickable { shift(1) }.padding(horizontal = 8.dp))
+        Box(Modifier.size(44.dp).clickable { shift(-1) }, contentAlignment = Alignment.Center) {
+            Text("‹", style = MaterialTheme.typography.titleLarge, color = D.onDark)
+        }
+        Text("$label $year".uppercase(), style = MaterialTheme.typography.labelLarge.copy(fontSize = 14.sp), color = D.onDark)
+        Box(Modifier.size(44.dp).clickable { shift(1) }, contentAlignment = Alignment.Center) {
+            Text("›", style = MaterialTheme.typography.titleLarge, color = D.onDark)
+        }
     }
 }
 
@@ -234,11 +283,11 @@ private fun BillRow(model: AppModel, expense: Expense, month: Month, categories:
     val sep = LocalDecimalSeparator.current
     val cur = LocalCurrencySymbol.current
     val paid = expense.isPaid(month)
-    val accent = if (expense.isIncome) reino.verdigris else reino.brass
+    val accent = if (expense.isIncome) D.teal else D.ink
     val numberStyle = TextStyle(
-        fontFamily = LocalReinoType.current.mono,
-        fontSize = 14.sp,
-        letterSpacing = 0.02.em,
+        fontFamily = MaterialTheme.typography.bodyMedium.fontFamily,
+        fontSize = 15.sp,
+        fontFeatureSettings = "tnum",
         textAlign = TextAlign.End,
     )
     // Only a variable line is typed into; a fixed bill, a one-off and a ledger's sum are all read
@@ -247,7 +296,7 @@ private fun BillRow(model: AppModel, expense: Expense, month: Month, categories:
 
     Column {
         Row(
-            Modifier.fillMaxWidth().height(56.dp),
+            Modifier.fillMaxWidth().heightIn(min = 64.dp).padding(end = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             // A ledger's money is already spent, so its check is a statement of fact, not a toggle.
@@ -261,14 +310,14 @@ private fun BillRow(model: AppModel, expense: Expense, month: Month, categories:
                     .clickable { if (expense.ledger) model.openLedger(expense) else model.openEdit(expense) }
                     .padding(start = 4.dp),
             ) {
-                Text(expense.title, style = MaterialTheme.typography.bodyLarge, color = reino.ink, maxLines = 1)
+                Text(expense.title, style = MaterialTheme.typography.bodyMedium.copy(fontSize = 15.sp), fontWeight = FontWeight.Medium, color = D.ink, maxLines = 1)
                 // The section heading already names the kind, so the subtitle is just the category —
                 // named as its own note names it, not as the slug the link points at.
                 categoryTitle(expense.category, categories)?.let {
                     Text(
                         it,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = if (expense.isIncome) reino.verdigris else reino.inkFaint,
+                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
+                        color = D.soft,
                     )
                 }
             }
@@ -281,18 +330,17 @@ private fun BillRow(model: AppModel, expense: Expense, month: Month, categories:
                 val amount = expense.amount(month)
                 Text(
                     amount?.let { formatMoney(it, sep, cur) } ?: NoValue,
-                    style = numberStyle.copy(fontWeight = FontWeight.SemiBold),
+                    style = numberStyle.copy(fontWeight = FontWeight.Medium),
                     color = when {
                         amount == null -> reino.inkFaint
-                        paid -> reino.brass
-                        else -> reino.ink
+                        expense.isIncome -> D.teal
+                        else -> D.ink
                     },
                     // Padded like the field beside it, so a printed figure and a typed one share a line.
                     modifier = Modifier.width(AmountColumn).reinoFieldInset(),
                 )
             }
         }
-        HairlineDivider()
     }
 }
 

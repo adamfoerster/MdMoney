@@ -24,7 +24,12 @@ class IosAppSettings : AppSettings {
         if (value == null) defaults.removeObjectForKey(KEY_IMPORT_MODEL) else defaults.setObject(value, KEY_IMPORT_MODEL)
     }
 
+    override fun hideAmounts(): Boolean = defaults.boolForKey(KEY_HIDE)
+
+    override fun setHideAmounts(hidden: Boolean) = defaults.setBool(hidden, KEY_HIDE)
+
     private companion object {
+        const val KEY_HIDE = "hideAmounts"
         const val KEY_LANG = "language"
         const val KEY_DECIMAL = "decimalSeparator"
         const val KEY_IMPORT_MODEL = "importModel"

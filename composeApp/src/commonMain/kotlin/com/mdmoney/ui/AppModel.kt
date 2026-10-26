@@ -101,6 +101,10 @@ data class UiState(
     val canImport: Boolean = false,
     /** Something the user asked for that could not be done, to be told once. */
     val notice: Notice? = null,
+    /** The accounts list's per-account balance and unpaid recurring bills, by account folder name. */
+    val summaries: Map<String, AccountSummary> = emptyMap(),
+    /** Masks balances and recurring amounts on the accounts list. */
+    val hideAmounts: Boolean = false,
 )
 
 enum class Notice { CANNOT_GROUP }
@@ -139,6 +143,7 @@ class AppModel(
             year = thisYear,
             homeMonth = thisMonth,
             canImport = importPlatform != null,
+            hideAmounts = settings.hideAmounts(),
         )
     )
     val state: StateFlow<UiState> = _state.asStateFlow()
@@ -160,6 +165,7 @@ class AppModel(
             _state.update { it.copy(loading = true) }
             val accounts = runCatching { repo.accounts() }.getOrDefault(emptyList())
             _state.update { it.copy(accounts = accounts, loading = false) }
+            loadSummaries(accounts)
             // Optional deep link: open a specific account straight away.
             initialAccount?.takeIf { it in accounts }?.let { openAccount(it) }
         }
@@ -176,8 +182,13 @@ class AppModel(
 
     fun selectTab(tab: HomeTab) = _state.update { it.copy(tab = tab) }
 
-    fun switchAccount() = _state.update {
-        it.copy(screen = Screen.Accounts, selectedAccount = null, editor = null, openCategory = null)
+    fun switchAccount() {
+        val leaving = _state.value.selectedAccount
+        _state.update {
+            it.copy(screen = Screen.Accounts, selectedAccount = null, editor = null, openCategory = null)
+        }
+        // Whatever was edited inside the account has to show on the list it returns to.
+        leaving?.let { scope.launch { refreshSummary(it) } }
     }
 
     /** Opens statement import for the open account. */
@@ -268,6 +279,60 @@ class AppModel(
         _state.value.selectedAccount?.let { recomputeBalance(it) }
     }
 
+    // --- Accounts list summary ---
+
+    /** Paints every account's summary from the cache, then again once each has synced from disk. */
+    private suspend fun loadSummaries(accounts: List<String>) {
+        accounts.forEach { refreshSummary(it) }
+        accounts.forEach { account ->
+            runCatching { repo.syncAccount(account, thisYear) }
+            refreshSummary(account)
+        }
+    }
+
+    private suspend fun refreshSummary(account: String) {
+        val summary = runCatching {
+            val accountMeta = repo.accountMeta(account)
+            val initial = accountMeta.initialBalance(thisYear)
+            val received = repo.receivedTotal(account, thisYear)
+            val paid = repo.paidTotal(account, thisYear)
+            AccountSummary(
+                title = accountMeta.title,
+                currency = accountMeta.currency,
+                balance = initial?.let { it + received - paid },
+                month = thisMonth,
+                pending = pendingRecurring(repo.cachedExpenses(account), thisYear, thisMonth),
+            )
+        }.getOrNull() ?: return
+        _state.update { it.copy(summaries = it.summaries + (account to summary)) }
+    }
+
+    /** Accounts list: marks a recurring bill paid for the current month. Nothing else is editable there. */
+    fun markPaidThisMonth(expense: Expense) {
+        if (expense.isPaid(thisMonth)) return
+        val updated = expense.copy(paid = expense.paid.toMutableMap().apply { put(thisMonth, true) })
+        scope.launch {
+            val resolved = runCatching { repo.cacheSave(updated) }.getOrNull() ?: return@launch
+            refreshSummary(expense.account)
+            persistAsync(expense, resolved)
+        }
+    }
+
+    /** Accounts list: types in a variable bill's amount for the current month. */
+    fun setVariableAmountFromList(expense: Expense, amount: Double?) {
+        val updated = expense.copy(amounts = expense.amounts.toMutableMap().apply { put(thisMonth, amount) })
+        scope.launch {
+            val resolved = runCatching { repo.cacheSave(updated) }.getOrNull() ?: return@launch
+            refreshSummary(expense.account)
+            persistAsync(expense, resolved)
+        }
+    }
+
+    fun setHideAmounts(hidden: Boolean) {
+        settings.setHideAmounts(hidden)
+        _state.update { it.copy(hideAmounts = hidden) }
+    }
+
     fun setHomeMonth(month: Month) = _state.update { it.copy(homeMonth = month) }
 
     private suspend fun refreshFromCache(account: String) {
@@ -317,7 +382,9 @@ class AppModel(
 
     fun openAdd() = _state.update { st ->
         val account = st.selectedAccount ?: return@update st
-        st.copy(editor = EditorState(isNew = true, original = null, initial = Expense.empty(account, st.year)))
+        st.copy(
+            editor = EditorState(isNew = true, original = null, initial = Expense.empty(account, st.year), defaultMonth = st.homeMonth),
+        )
     }
 
     /**

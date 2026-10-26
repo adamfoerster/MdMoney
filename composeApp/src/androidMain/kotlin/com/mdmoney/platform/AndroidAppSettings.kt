@@ -32,7 +32,14 @@ class AndroidAppSettings(context: Context) : AppSettings {
         }.apply()
     }
 
+    override fun hideAmounts(): Boolean = prefs.getBoolean(KEY_HIDE, false)
+
+    override fun setHideAmounts(hidden: Boolean) {
+        prefs.edit().putBoolean(KEY_HIDE, hidden).apply()
+    }
+
     private companion object {
+        const val KEY_HIDE = "hideAmounts"
         const val KEY_LANG = "language"
         const val KEY_DECIMAL = "decimalSeparator"
         const val KEY_IMPORT_MODEL = "importModel"

@@ -58,6 +58,29 @@ interface Strings {
     val annual: String
     val reports: String
     val balance: String
+    val pendingBills: String
+    val nameLabel: String
+    val change: String
+    val chooseCategory: String
+    val searchOrCreate: String
+    val mostUsed: String
+    val newCategory: String
+    val amountPerMonth: String
+    val repeatsIn: String
+    val wholeYear: String
+    val pickMonths: String
+    val saveExpense: String
+    val oneOffNewHint: String
+    val variableNewHint: String
+    val close: String
+    fun typeHint(type: ExpenseType): String
+    fun monthsSelected(n: Int): String
+    fun everyMonthSummary(year: Int, total: String): String
+    fun createCategory(name: String): String
+    val noOpeningBalanceYet: String
+    val variableEnterAmount: String
+    val hideAmounts: String
+    val showAmounts: String
     val initialBalance: String
     val setInitialBalance: String
     val addOneOff: String
@@ -126,6 +149,7 @@ interface Strings {
     val confirmLine: String
     val pdfUnavailable: String
     fun reviewPosition(n: Int, total: Int): String
+    fun plusVariable(n: Int): String
     val alreadyImported: String
     val selectAll: String
     val selectNone: String

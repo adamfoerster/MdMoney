@@ -37,6 +37,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import com.mdmoney.LocalCurrencySymbol
+import com.mdmoney.ui.theme.box
+import com.mdmoney.ui.theme.D
+import com.mdmoney.domain.Month
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.Box
 import com.mdmoney.LocalDecimalSeparator
 import com.mdmoney.LocalStrings
 import com.mdmoney.data.formatInput
@@ -86,101 +94,115 @@ fun LedgerSheet(model: AppModel, ledger: Ledger, categories: List<Category> = em
         lineHeight = 23.sp,
     )
 
-    ModalBottomSheet(onDismissRequest = { model.closeLedger() }, sheetState = sheetState) {
-        // One scroll for the whole book, as the design system's page reads: the sum's band closes
-        // the entries rather than floating over them. Scrolling only the rows would push the band
-        // and the actions off the bottom of a long month.
+    ModalBottomSheet(
+        onDismissRequest = { model.closeLedger() },
+        sheetState = sheetState,
+        containerColor = D.bg,
+        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+    ) {
+        // One scroll for the whole sheet: the entries, then the actions, so a long month never
+        // pushes the buttons off the bottom.
         Column(
             Modifier.fillMaxWidth()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp)
-                .padding(bottom = 32.dp),
+                .padding(horizontal = 16.dp)
+                .padding(bottom = 28.dp),
         ) {
-            // --- Masthead: what this book is, and how many entries it holds ---
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
-                Column(Modifier.weight(1f)) {
-                    val category = categoryTitle(ledger.category, categories)
-                    Eyebrow("${s.month(ledger.month)} ${ledger.year}${category?.let { " · $it" } ?: ""}")
+            // --- Header: month · category, group name ---
+            val category = categoryTitle(ledger.category, categories)
+            Text(
+                "${s.month(ledger.month)} ${ledger.year}${category?.let { " · $it" } ?: ""}".uppercase(),
+                style = MaterialTheme.typography.labelMedium,
+                color = D.soft,
+                modifier = Modifier.padding(start = 4.dp),
+            )
+            Text(
+                ledger.title,
+                style = MaterialTheme.typography.displayMedium.copy(fontSize = 32.sp, lineHeight = 34.sp),
+                color = D.ink,
+                modifier = Modifier.padding(start = 4.dp, top = 6.dp),
+            )
+
+            // --- Total ---
+            Row(
+                Modifier.padding(top = 14.dp, bottom = 6.dp).fillMaxWidth().clip(RoundedCornerShape(12.dp))
+                    .background(D.dark).padding(horizontal = 16.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(s.total.uppercase(), style = MaterialTheme.typography.labelSmall, color = D.dim)
                     Text(
-                        ledger.title,
-                        style = MaterialTheme.typography.displayMedium,
-                        color = reino.ink,
-                        modifier = Modifier.padding(top = 8.dp),
+                        "${entries.size} ${s.entries}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = D.dim,
                     )
                 }
-                // Counting is part of the brand: an archive says how much it holds, zero-padded.
                 Text(
-                    "${entries.size.toString().padStart(2, '0')} ${s.entries}".uppercase(),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = reino.inkFaint,
-                    modifier = Modifier.padding(start = 16.dp, bottom = 4.dp),
+                    formatMoney(ledger.total, sep, cur),
+                    style = MaterialTheme.typography.bodyLarge.copy(fontSize = 26.sp, fontFeatureSettings = "tnum"),
+                    fontWeight = FontWeight.Medium,
+                    color = D.onDark,
                 )
             }
-            Spacer(Modifier.height(16.dp))
-            // The masthead closes on the heavy ink rule, not a hairline.
-            Row(Modifier.fillMaxWidth().height(2.dp).background(reino.ink)) {}
 
             if (entries.isEmpty()) {
                 Text(
                     s.noEntries,
                     style = MaterialTheme.typography.bodyLarge,
-                    color = reino.inkSoft,
+                    color = D.soft,
                     modifier = Modifier.padding(vertical = 24.dp),
                 )
             } else {
-                Row(Modifier.fillMaxWidth().padding(top = 14.dp, bottom = 10.dp)) {
-                    ColumnHead(s.numberLabel, Modifier.width(OrdinalWidth))
-                    ColumnHead(s.noteLabel, Modifier.weight(1f))
-                    ColumnHead(s.amountLabel, Modifier.width(96.dp), TextAlign.End)
-                }
-                Column {
-                    entries.forEachIndexed { index, entry ->
-                        HairlineDivider()
-                        // The whole row opens the entry to edit or remove; a purchase is a line you
-                        // correct in place, not only one you can strike out.
-                        Row(
-                            Modifier.fillMaxWidth().clickable { editing = entry }.padding(vertical = 13.dp),
-                            verticalAlignment = Alignment.Top,
-                        ) {
-                            Text(
-                                (index + 1).toString().padStart(2, '0'),
-                                style = MaterialTheme.typography.labelLarge,
-                                color = reino.brass,
-                                modifier = Modifier.width(OrdinalWidth).padding(top = 3.dp),
-                            )
-                            Column(Modifier.weight(1f)) {
-                                Text(entry.note, style = description, color = reino.ink, maxLines = 2)
-                                Text(
-                                    formatEntryDate(entry.date, s),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = reino.inkFaint,
-                                    modifier = Modifier.padding(top = 3.dp),
-                                )
+                // The whole row opens the entry to edit or remove; a purchase is a line you
+                // correct in place, not only one you can strike out.
+                entries.forEach { entry ->
+                    Box(Modifier.fillMaxWidth().height(1.dp).background(D.rule))
+                    Row(
+                        Modifier.fillMaxWidth().clickable { editing = entry }.heightIn(min = 68.dp).padding(vertical = 12.dp, horizontal = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        val day = entry.date.takeLast(2).trimStart('0')
+                        val monthNo = entry.date.drop(4).take(2).toIntOrNull()
+                        Column(Modifier.width(44.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(day, style = MaterialTheme.typography.bodyLarge.copy(fontSize = 18.sp, fontFeatureSettings = "tnum"), fontWeight = FontWeight.Medium, color = D.ink)
+                            Month.ALL.firstOrNull { it.number == monthNo }?.let {
+                                Text(s.monthShort(it).uppercase(), style = MaterialTheme.typography.labelSmall, color = D.soft)
                             }
-                            Text(
-                                formatMoney(entry.amount, sep, cur),
-                                style = figure.copy(fontWeight = FontWeight.SemiBold),
-                                color = reino.ink,
-                                textAlign = TextAlign.End,
-                                modifier = Modifier.width(96.dp).padding(top = 2.dp),
-                            )
                         }
+                        Text(
+                            entry.note,
+                            style = MaterialTheme.typography.bodyMedium.copy(fontSize = 15.sp),
+                            fontWeight = FontWeight.Medium,
+                            color = D.ink,
+                            maxLines = 2,
+                            modifier = Modifier.weight(1f),
+                        )
+                        Text(
+                            formatMoney(entry.amount, sep, cur),
+                            style = MaterialTheme.typography.bodyMedium.copy(fontSize = 15.sp, fontFeatureSettings = "tnum"),
+                            fontWeight = FontWeight.Medium,
+                            color = D.ink,
+                            textAlign = TextAlign.End,
+                        )
                     }
                 }
+                Box(Modifier.fillMaxWidth().height(1.dp).background(D.rule))
             }
 
-            // --- The sum, carried by the brass band ---
-            Spacer(Modifier.height(20.dp))
-            SectionBand(title = s.total, number = formatMoney(ledger.total, sep, cur))
-
-            Spacer(Modifier.height(20.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                ReinoButton(
-                    s.addEntry,
-                    onClick = { model.openAddOneOff(ledger.title, ledger.month, reopenLedger = true) },
-                    trailingArrow = true,
-                )
-                ReinoButton(s.cancel, onClick = { model.closeLedger() }, variant = ReinoButtonVariant.Ghost)
+            // --- Actions ---
+            Row(Modifier.padding(top = 16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Box(
+                    Modifier.weight(1f).height(52.dp).box(Color.Transparent, Color(0xFFB8AE9A), 10).clickable { model.closeLedger() },
+                    contentAlignment = Alignment.Center,
+                ) { Text(s.cancel, style = MaterialTheme.typography.bodyMedium.copy(fontSize = 15.sp), color = D.ink) }
+                Box(
+                    Modifier.weight(2f).height(52.dp).clip(RoundedCornerShape(10.dp)).background(D.dark)
+                        .clickable { model.openAddOneOff(ledger.title, ledger.month, reopenLedger = true) },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text("+  ${s.addEntry}", style = MaterialTheme.typography.bodyMedium.copy(fontSize = 15.sp), fontWeight = FontWeight.Medium, color = D.onDark)
+                }
             }
         }
     }
