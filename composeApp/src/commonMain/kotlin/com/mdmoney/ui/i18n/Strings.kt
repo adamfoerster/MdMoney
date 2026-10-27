@@ -115,6 +115,41 @@ interface Strings {
     val cannotGroupNotice: String
     val remove: String
     val oneOffHint: String
+    val deleteEntry: String
+    val fixedTag: String
+    val variableTag: String
+    val moveToAnother: String
+    val oneOrRecurring: String
+    val moveEntryTitle: String
+    val back: String
+    val destOneOff: String
+    val destRecurring: String
+    val newOneOffTitle: String
+    val newOneOffSub: String
+    val notSet: String
+    val editGroup: String
+    val tapEntryHint: String
+    val cannotMoveNotice: String
+    val useAsValueHint: String
+    val addToValueHint: String
+    fun entryFrom(date: String, title: String): String
+    fun entryIn(date: String, title: String): String
+    fun searchOneOffs(month: Month): String
+    fun oneOffListHead(month: Month, year: Int): String
+    fun recurringListHead(month: Month): String
+    fun becomes(title: String, amount: String): String
+    fun becomesEmpty(title: String): String
+    fun moveTo(title: String): String
+    fun continueWith(title: String): String
+    fun recurringMoveHint(month: Month): String
+    fun movingTo(title: String, month: Month, year: Int): String
+    fun alreadyHas(title: String, amount: String, month: Month): String
+    fun useAsValue(month: Month): String
+    fun addToValue(month: Month): String
+    fun markedPaid(title: String, month: Month): String
+    fun noEntriesLeft(title: String): String
+    fun moveSet(amount: String): String
+    fun moveAdd(amount: String): String
     val categories: String
     val uncategorized: String
     val spendByMonth: String

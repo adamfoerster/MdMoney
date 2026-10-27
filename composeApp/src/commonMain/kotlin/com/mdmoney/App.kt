@@ -27,6 +27,7 @@ import com.mdmoney.importer.ImportPlatform
 import com.mdmoney.ui.AppModel
 import com.mdmoney.ui.HomeTab
 import com.mdmoney.ui.MdMoneyTheme
+import com.mdmoney.ui.Notice
 import com.mdmoney.ui.Screen
 import com.mdmoney.ui.components.ReinoTabBar
 import com.mdmoney.ui.i18n.EnStrings
@@ -106,12 +107,15 @@ fun App(
                     }
                     state.oneOff?.let { OneOffSheet(model, it) }
                     state.ledger?.let {
-                        LedgerSheet(model, it, state.categories, groupTitles(state.expenses, it.month, it.income, except = it.title))
+                        LedgerSheet(model, it, state.categories, state.expenses)
                     }
-                    state.notice?.let {
+                    state.notice?.let { notice ->
                         AlertDialog(
                             onDismissRequest = { model.dismissNotice() },
-                            text = { Text(LocalStrings.current.cannotGroupNotice) },
+                            text = {
+                                val s = LocalStrings.current
+                                Text(if (notice == Notice.CANNOT_MOVE) s.cannotMoveNotice else s.cannotGroupNotice)
+                            },
                             confirmButton = { TextButton(onClick = { model.dismissNotice() }) { Text("OK") } },
                         )
                     }

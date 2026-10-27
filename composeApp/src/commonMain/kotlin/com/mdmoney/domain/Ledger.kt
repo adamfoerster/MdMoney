@@ -61,6 +61,9 @@ data class Ledger(
      * How the ledger appears everywhere expenses are listed or summed: a one-off landing in its own
      * month, already paid — the money left the account when the purchase was made (or, for an
      * [income] ledger, already received).
+     *
+     * A ledger with no entries has no purchase to show, so it carries no amount in any month — it
+     * would otherwise appear in its month as an empty group worth 0.
      */
     fun toExpense(): Expense = Expense(
         id = id,
@@ -73,7 +76,7 @@ data class Ledger(
         subStatus = null,
         projected = null,
         tags = emptyList(),
-        amounts = Month.ALL.associateWith { if (it == month) total else null },
+        amounts = Month.ALL.associateWith { if (it == month && entries.isNotEmpty()) total else null },
         paid = Month.ALL.associateWith { it == month },
         ledger = true,
     )

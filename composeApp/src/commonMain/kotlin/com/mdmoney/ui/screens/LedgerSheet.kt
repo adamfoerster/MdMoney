@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
@@ -51,12 +52,16 @@ import com.mdmoney.data.formatInput
 import com.mdmoney.data.formatMoney
 import com.mdmoney.data.parseAmount
 import com.mdmoney.domain.Category
+import com.mdmoney.domain.Expense
 import com.mdmoney.domain.Ledger
 import com.mdmoney.domain.LedgerEntry
+import com.mdmoney.domain.MergeMode
 import com.mdmoney.domain.categoryTitle
 import com.mdmoney.ui.AppModel
 import com.mdmoney.ui.components.Eyebrow
 import com.mdmoney.ui.components.HairlineDivider
+import com.mdmoney.ui.components.Icons24
+import com.mdmoney.ui.components.LineIcon
 import com.mdmoney.ui.components.ReinoButton
 import com.mdmoney.ui.components.ReinoButtonVariant
 import com.mdmoney.ui.components.SectionBand
@@ -76,7 +81,7 @@ private val OrdinalWidth = 30.dp
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun LedgerSheet(model: AppModel, ledger: Ledger, categories: List<Category> = emptyList(), groups: List<String> = emptyList()) {
+fun LedgerSheet(model: AppModel, ledger: Ledger, categories: List<Category> = emptyList(), expenses: List<Expense> = emptyList()) {
     val s = LocalStrings.current
     val reino = LocalReinoColors.current
     val sep = LocalDecimalSeparator.current
@@ -85,6 +90,11 @@ fun LedgerSheet(model: AppModel, ledger: Ledger, categories: List<Category> = em
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val entries = ledger.sorted()
     var editing by remember { mutableStateOf<LedgerEntry?>(null) }
+    // The pencil turns the entries into something to act on: tap one for move, edit and delete.
+    var editMode by remember { mutableStateOf(false) }
+    var acting by remember { mutableStateOf<LedgerEntry?>(null) }
+    var moving by remember { mutableStateOf<LedgerEntry?>(null) }
+    var merging by remember { mutableStateOf<Pair<LedgerEntry, Expense>?>(null) }
 
     val figure = TextStyle(fontFamily = type.mono, fontSize = 14.sp, letterSpacing = 0.02.em)
     val description = TextStyle(
@@ -110,18 +120,31 @@ fun LedgerSheet(model: AppModel, ledger: Ledger, categories: List<Category> = em
         ) {
             // --- Header: month · category, group name ---
             val category = categoryTitle(ledger.category, categories)
-            Text(
-                "${s.month(ledger.month)} ${ledger.year}${category?.let { " · $it" } ?: ""}".uppercase(),
-                style = MaterialTheme.typography.labelMedium,
-                color = D.soft,
-                modifier = Modifier.padding(start = 4.dp),
-            )
-            Text(
-                ledger.title,
-                style = MaterialTheme.typography.displayMedium.copy(fontSize = 32.sp, lineHeight = 34.sp),
-                color = D.ink,
-                modifier = Modifier.padding(start = 4.dp, top = 6.dp),
-            )
+            Row(verticalAlignment = Alignment.Top) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        "${s.month(ledger.month)} ${ledger.year}${category?.let { " · $it" } ?: ""}".uppercase(),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = D.soft,
+                        modifier = Modifier.padding(start = 4.dp),
+                    )
+                    Text(
+                        ledger.title,
+                        style = MaterialTheme.typography.displayMedium.copy(fontSize = 32.sp, lineHeight = 34.sp),
+                        color = D.ink,
+                        modifier = Modifier.padding(start = 4.dp, top = 6.dp),
+                    )
+                }
+                Box(
+                    Modifier.size(44.dp).clip(RoundedCornerShape(999.dp))
+                        .background(if (editMode) D.dark else Color.Transparent)
+                        .clickable { editMode = !editMode },
+                    contentAlignment = Alignment.Center,
+                ) { LineIcon(Icons24.Pencil, if (editMode) D.onDark else D.ink, size = 20.dp) }
+                Box(Modifier.size(44.dp).clip(RoundedCornerShape(999.dp)).clickable { model.closeLedger() }, contentAlignment = Alignment.Center) {
+                    LineIcon(Icons24.Close, D.ink, size = 20.dp, strokeWidth = 2f)
+                }
+            }
 
             // --- Total ---
             Row(
@@ -153,12 +176,11 @@ fun LedgerSheet(model: AppModel, ledger: Ledger, categories: List<Category> = em
                     modifier = Modifier.padding(vertical = 24.dp),
                 )
             } else {
-                // The whole row opens the entry to edit or remove; a purchase is a line you
-                // correct in place, not only one you can strike out.
+                // In edit mode the whole row opens the entry's actions (move, edit, delete).
                 entries.forEach { entry ->
                     Box(Modifier.fillMaxWidth().height(1.dp).background(D.rule))
                     Row(
-                        Modifier.fillMaxWidth().clickable { editing = entry }.heightIn(min = 68.dp).padding(vertical = 12.dp, horizontal = 4.dp),
+                        Modifier.fillMaxWidth().clickable(enabled = editMode) { acting = entry }.heightIn(min = 68.dp).padding(vertical = 12.dp, horizontal = 4.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
@@ -185,9 +207,19 @@ fun LedgerSheet(model: AppModel, ledger: Ledger, categories: List<Category> = em
                             color = D.ink,
                             textAlign = TextAlign.End,
                         )
+                        if (editMode) LineIcon(Icons24.Dots, D.soft, size = 18.dp, strokeWidth = 3f)
                     }
                 }
                 Box(Modifier.fillMaxWidth().height(1.dp).background(D.rule))
+                if (editMode) {
+                    Text(
+                        s.tapEntryHint,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = D.soft,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
+                    )
+                }
             }
 
             // --- Actions ---
@@ -207,11 +239,53 @@ fun LedgerSheet(model: AppModel, ledger: Ledger, categories: List<Category> = em
         }
     }
 
+    acting?.let { entry ->
+        EntryActionsSheet(
+            ledger = ledger,
+            entry = entry,
+            onMove = { moving = entry; acting = null },
+            onEdit = { editing = entry; acting = null },
+            onDelete = { model.removeLedgerEntry(entry); acting = null },
+            onDismiss = { acting = null },
+        )
+    }
+
+    moving?.let { entry ->
+        MoveEntrySheet(
+            ledger = ledger,
+            entry = entry,
+            expenses = expenses,
+            categories = categories,
+            onBack = { moving = null; acting = entry },
+            onMoveToOneOff = { title -> model.moveLedgerEntry(entry, title); moving = null },
+            onPickRecurring = { target ->
+                if (asksHow(ledger, target)) {
+                    merging = entry to target
+                } else {
+                    model.moveLedgerEntryToRecurring(entry, target, MergeMode.REPLACE)
+                    moving = null
+                }
+            },
+        )
+    }
+
+    merging?.let { (entry, target) ->
+        MergeChoiceSheet(
+            ledger = ledger,
+            entry = entry,
+            target = target,
+            onBack = { merging = null },
+            onConfirm = { mode ->
+                model.moveLedgerEntryToRecurring(entry, target, mode)
+                merging = null
+                moving = null
+            },
+        )
+    }
+
     editing?.let { entry ->
         EditLedgerEntryDialog(
             entry = entry,
-            groups = groups,
-            onMove = { model.moveLedgerEntry(entry, it); editing = null },
             onUngroup = { model.ungroupLedgerEntry(entry); editing = null },
             onDismiss = { editing = null },
             onRemove = { model.removeLedgerEntry(entry); editing = null },
@@ -228,8 +302,6 @@ fun LedgerSheet(model: AppModel, ledger: Ledger, categories: List<Category> = em
 @Composable
 private fun EditLedgerEntryDialog(
     entry: LedgerEntry,
-    groups: List<String>,
-    onMove: (String) -> Unit,
     onUngroup: () -> Unit,
     onDismiss: () -> Unit,
     onRemove: () -> Unit,
@@ -272,7 +344,7 @@ private fun EditLedgerEntryDialog(
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
                 )
-                MoveToGroup(groups, onMove = onMove, onOut = onUngroup)
+                TextButton(onClick = onUngroup, modifier = Modifier.padding(top = 4.dp)) { Text(s.moveOutOfGroup) }
                 TextButton(
                     onClick = onRemove,
                     modifier = Modifier.padding(top = 4.dp),

@@ -37,6 +37,8 @@ object D {
     val tagInk = Color(0xFF4A463E)
     val tagIncome = Color(0xFFDCEAE5)
     val tagIncomeInk = Color(0xFF23473F)
+    val accent = Color(0xFF463A6B)
+    val accentSoft = Color(0xFFF3EFFA)
 }
 
 fun Modifier.box(bg: Color, border: Color, radius: Int): Modifier {

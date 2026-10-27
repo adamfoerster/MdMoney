@@ -60,6 +60,36 @@ class MonthLinesTest {
         assertEquals(listOf("Alimentação"), monthLines(listOf(june), 2026, Month.JUN).eventual.map { it.title })
     }
 
+    /** A group with no purchases in it is not a spend: it stays out of its own month too. */
+    @Test
+    fun ledger_without_entries_is_hidden_even_in_its_own_month() {
+        fun ledger(entries: List<LedgerEntry>) = Ledger(
+            id = "2026 Jul - Alimentação",
+            account = "Regions",
+            title = "Alimentação",
+            category = "food",
+            year = 2026,
+            month = Month.JUL,
+            entries = entries,
+        ).toExpense()
+
+        assertEquals(emptyList(), monthLines(listOf(ledger(emptyList())), 2026, Month.JUL).eventual)
+        assertEquals(
+            listOf("Alimentação"),
+            monthLines(listOf(ledger(listOf(LedgerEntry("20260705", "Café", 10.0)))), 2026, Month.JUL)
+                .eventual.map { it.title },
+        )
+        // Entries that net to zero are still records, so the group stays.
+        assertEquals(
+            listOf("Alimentação"),
+            monthLines(
+                listOf(ledger(listOf(LedgerEntry("20260705", "Café", 10.0), LedgerEntry("20260706", "Estorno", -10.0)))),
+                2026,
+                Month.JUL,
+            ).eventual.map { it.title },
+        )
+    }
+
     @Test
     fun splits_income_recurring_and_eventual_and_ignores_other_years() {
         val rows = listOf(

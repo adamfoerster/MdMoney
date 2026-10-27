@@ -12,6 +12,7 @@ import com.mdmoney.domain.Expense
 import com.mdmoney.domain.ExpenseType
 import com.mdmoney.domain.Ledger
 import com.mdmoney.domain.LedgerEntry
+import com.mdmoney.domain.MergeMode
 import com.mdmoney.domain.Month
 import com.mdmoney.importer.ImportPlatform
 import com.mdmoney.platform.currentDay
@@ -107,7 +108,7 @@ data class UiState(
     val hideAmounts: Boolean = false,
 )
 
-enum class Notice { CANNOT_GROUP }
+enum class Notice { CANNOT_GROUP, CANNOT_MOVE }
 
 /**
  * Single app-wide state holder. Plain class exposing a [StateFlow] and intent methods (no AndroidX
@@ -475,6 +476,17 @@ class AppModel(
         val current = _state.value.ledger ?: return@launch
         val moved = runCatching { repo.moveEntry(current, entry, toTitle) }.getOrNull() ?: return@launch
         _state.update { it.copy(ledger = moved.first) }
+        _state.value.selectedAccount?.let { refreshFromCache(it) }
+    }
+
+    /**
+     * Moves a purchase of the open group into the recurring expense [target], as that month's value
+     * or added to it ([mode]). Says so when the target can't take it.
+     */
+    fun moveLedgerEntryToRecurring(entry: LedgerEntry, target: Expense, mode: MergeMode) = scope.launch {
+        val current = _state.value.ledger ?: return@launch
+        val moved = runCatching { repo.moveEntryToRecurring(current, entry, target, mode) }.getOrNull()
+        _state.update { it.copy(ledger = moved?.first ?: it.ledger, notice = if (moved == null) Notice.CANNOT_MOVE else it.notice) }
         _state.value.selectedAccount?.let { refreshFromCache(it) }
     }
 

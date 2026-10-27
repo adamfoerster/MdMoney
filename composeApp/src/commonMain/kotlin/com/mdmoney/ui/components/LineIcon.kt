@@ -46,4 +46,8 @@ object Icons24 {
     val Info = listOf("M21 12a9 9 0 1 1 -18 0 9 9 0 0 1 18 0z", "M12 11v5M12 8h.01")
     val Plus = listOf("M12 5v14M5 12h14")
     val Check = listOf("M5 12l5 5 9-10")
+    val Pencil = listOf("M4 20h4L19 9l-4-4L4 16z", "M13.5 6.5l4 4")
+    val Trash = listOf("M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3")
+    val MoveRight = listOf("M4 12h13M13 7l5 5-5 5", "M20 4v16")
+    val Dots = listOf("M5 12h.01M12 12h.01M19 12h.01")
 }

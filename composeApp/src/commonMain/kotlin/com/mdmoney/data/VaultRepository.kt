@@ -6,7 +6,9 @@ import com.mdmoney.domain.Expense
 import com.mdmoney.domain.ExpenseType
 import com.mdmoney.domain.Ledger
 import com.mdmoney.domain.LedgerEntry
+import com.mdmoney.domain.MergeMode
 import com.mdmoney.domain.Month
+import com.mdmoney.domain.mergedAmount
 import com.mdmoney.importer.EntryKey
 import com.mdmoney.importer.ImportDedup
 import com.mdmoney.importer.ImportEntry
@@ -191,6 +193,37 @@ class VaultRepository(
         writeLedger(source)
         writeLedger(target, existingContent)
         source to target
+    }
+
+    /**
+     * Moves [entry] from the group [from] into the recurring expense [target], in the group's month:
+     * that month's value becomes the purchase or grows by it ([mode]), and is marked paid. The
+     * purchase is also kept as a row in the note's body, so importing the same statement again
+     * doesn't bring it back. Returns the group and the note as saved, or null — touching nothing —
+     * when [target] is not a recurring note of the group's year.
+     */
+    suspend fun moveEntryToRecurring(
+        from: Ledger,
+        entry: LedgerEntry,
+        target: Expense,
+        mode: MergeMode,
+    ): Pair<Ledger, Expense>? = fileLock.withLock {
+        if (from.income || target.ledger || target.year != from.year) return@withLock null
+        val content = runCatching { storage.read(from.account, "${target.id}.md") }.getOrNull() ?: return@withLock null
+        if (LedgerMapper.isLedger(content)) return@withLock null
+        val current = ExpenseMapper.read(target.id, from.account, content, from.year)
+        if (current.type != ExpenseType.RECURRING_FIXED && current.type != ExpenseType.RECURRING_VARIABLE) return@withLock null
+
+        val updated = current.copy(
+            amounts = current.amounts + (from.month to mergedAmount(current.amounts[from.month], entry.amount, mode)),
+            paid = current.paid + (from.month to true),
+        )
+        // The note first: a failure between the two writes leaves the purchase in both places, not in neither.
+        val text = LedgerMapper.withAppendedRows(ExpenseMapper.write(content, current, updated, links), listOf(entry))
+        storage.write(from.account, "${target.id}.md", text)
+        cache.upsertAll(listOf(updated))
+        val source = writeLedger(from.copy(entries = from.entries.minusFirst(entry)))
+        source to updated
     }
 
     /**

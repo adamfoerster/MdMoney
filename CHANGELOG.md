@@ -12,6 +12,19 @@ heading when you cut a release.
 
 ## [Unreleased]
 
+## [0.16.0] — 2026-10-27
+
+### Added
+- **Move a purchase from a one-off group to another expense.** The group's detail now has an edit (pencil) button; in edit mode, tapping an entry offers *Move to another expense*, *Edit entry* and *Delete entry*. Moving goes to another one-off group of the month (picked from a searchable list, or a new one created with the entry) or to a recurring expense. When the recurring expense already has a value in that month you choose to **replace** it with the entry or **add** the entry to it; the month is marked paid, and the purchase stays as a row in the note's body so importing the same statement again does not bring it back. No change to the vault format.
+
+### Changed
+- The entry editor no longer carries the move-to-group chips (they moved to the new flow); *Take out of the group* stays there.
+
+## [0.15.1] — 2026-10-27
+
+### Fixed
+- A one-off group with no entries no longer shows in its month's screen; it appears once it has at least one entry. No change to the vault format.
+
 ## [0.15.0] — 2026-10-26
 
 ### Added
