@@ -60,6 +60,13 @@ implementation's own logic. When a test needs the repo's own files, take the roo
 Compose UI has no test harness here. Verify screens by running the desktop app
 (`./gradlew :composeApp:run`) — and keep the logic out of the composable where it can be tested.
 
+## Never commit — prepare and suggest
+
+The user reviews and commits manually. Never run `git commit`, never stage on their behalf, and never
+offer or ask to commit (no "want me to commit?" prompts or buttons). When the work is done, leave the
+working tree ready (version bumped, `CHANGELOG.md` and `project.pbxproj` updated, tests passing) and
+end with a suggested commit message in a fenced block, following the repo's `feat:`/`fix:` style.
+
 ## Non-negotiables
 
 - **The Markdown is the source of truth**, SQLite is only a cache — it's dropped and rebuilt on a

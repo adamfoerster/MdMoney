@@ -56,6 +56,16 @@ class ImportPlannerTest {
     }
 
     @Test
+    fun a_category_created_in_the_picker_files_the_line_under_a_ledger_titled_like_it() {
+        val rows = ImportPlanner.initialRows(lines, emptyMap()).filter { it.tx.description == "Mercado" }
+            .map { it.copy(category = "pet shop") }
+        val entries = ImportPlanner.entries(rows, listOf(Category("food", "Alimentação")), "Importado", "Entradas")
+
+        assertEquals("Pet Shop", entries.single().title)
+        assertEquals("pet shop", entries.single().category)
+    }
+
+    @Test
     fun a_chosen_group_wins_over_the_category_and_income_takes_its_own() {
         val rows = ImportPlanner.initialRows(lines, emptyMap())
             .map {

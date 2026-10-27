@@ -12,6 +12,11 @@ heading when you cut a release.
 
 ## [Unreleased]
 
+## [0.15.0] — 2026-10-26
+
+### Added
+- **Statement import uses the full category picker** on each line: search, most-used chips and "New category", the same one as in the new-expense form. A category created there is added to the vault's `categories/` folder on import.
+
 ## [0.14.1] — 2026-10-26
 
 ### Changed

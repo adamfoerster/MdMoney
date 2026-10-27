@@ -22,7 +22,10 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -47,6 +50,7 @@ import com.mdmoney.LocalDecimalSeparator
 import com.mdmoney.LocalStrings
 import com.mdmoney.data.formatMoney
 import com.mdmoney.domain.Category
+import com.mdmoney.ui.mostUsedCategories
 import com.mdmoney.domain.categoryTitle
 import com.mdmoney.importer.ExtractionResult
 import com.mdmoney.importer.GroupChoice
@@ -307,9 +311,10 @@ private fun ReviewPhase(importer: StatementImportModel, state: ImportUiState, ph
         Text(s.selectNone, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium, color = D.ink, modifier = Modifier.clickable { importer.selectAll(false) })
     }
     Spacer(Modifier.height(12.dp))
+    val mostUsed = mostUsedCategories(app.expenses)
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         state.rows.forEach { row ->
-            ReviewLine(row, app.categories, state.groups.forRow(row), importer)
+            ReviewLine(row, app.categories, mostUsed, state.groups.forRow(row), importer)
         }
     }
 
@@ -370,7 +375,7 @@ internal fun ReconciliationLines(r: Reconciliation) {
 }
 
 @Composable
-private fun ReviewLine(row: ReviewRow, categories: List<Category>, groups: List<GroupChoice>, importer: StatementImportModel) {
+private fun ReviewLine(row: ReviewRow, categories: List<Category>, mostUsed: List<String>, groups: List<GroupChoice>, importer: StatementImportModel) {
     val s = LocalStrings.current
     val sep = LocalDecimalSeparator.current
     val reino = LocalReinoColors.current
@@ -434,7 +439,7 @@ private fun ReviewLine(row: ReviewRow, categories: List<Category>, groups: List<
             }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            CategoryPicker(row.category, categories, Modifier.weight(1f)) { importer.setCategory(row.id, it) }
+            CategoryPicker(row.category, categories, mostUsed, Modifier.weight(1f)) { importer.setCategory(row.id, it) }
             GroupPicker(row.group, groups, Modifier.weight(1f)) { importer.setGroup(row.id, it) }
         }
     }
@@ -459,13 +464,37 @@ private fun PickerBox(label: String, todo: Boolean, modifier: Modifier, menu: @C
     }
 }
 
+/** The line's category as a field that opens the full picker — search, most used, and create a new one. */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun CategoryPicker(selected: String?, categories: List<Category>, modifier: Modifier, onPick: (String?) -> Unit) {
+private fun CategoryPicker(selected: String?, categories: List<Category>, mostUsed: List<String>, modifier: Modifier, onPick: (String?) -> Unit) {
     val s = LocalStrings.current
-    PickerBox(categoryTitle(selected, categories) ?: s.uncategorized, todo = selected == null, modifier = modifier) { close ->
-        DropdownMenuItem(text = { Text(s.uncategorized) }, onClick = { onPick(null); close() })
-        categories.forEach { c ->
-            DropdownMenuItem(text = { Text(c.title) }, onClick = { onPick(c.slug); close() })
+    var open by remember { mutableStateOf(false) }
+    Row(
+        modifier.height(44.dp)
+            .box(if (selected == null) D.todo else D.field, if (selected == null) D.todoBorder else D.fieldBorder, 8)
+            .clickable { open = true }.padding(horizontal = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Text(categoryTitle(selected, categories) ?: s.uncategorized, style = MaterialTheme.typography.bodyMedium, color = D.ink, maxLines = 1, modifier = Modifier.weight(1f))
+        Text("▾", style = MaterialTheme.typography.bodySmall, color = D.soft)
+    }
+    if (open) {
+        ModalBottomSheet(
+            onDismissRequest = { open = false },
+            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+            containerColor = D.bg,
+            shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+        ) {
+            CategoryPickerPage(
+                categories = categories,
+                mostUsed = mostUsed,
+                selected = selected,
+                onPick = { onPick(it); open = false },
+                onBack = { open = false },
+                noneLabel = s.uncategorized,
+            )
         }
     }
 }
