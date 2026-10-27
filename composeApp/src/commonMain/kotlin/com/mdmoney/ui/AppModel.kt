@@ -108,7 +108,7 @@ data class UiState(
     val hideAmounts: Boolean = false,
 )
 
-enum class Notice { CANNOT_GROUP, CANNOT_MOVE }
+enum class Notice { CANNOT_GROUP, CANNOT_MOVE, CANNOT_RENAME }
 
 /**
  * Single app-wide state holder. Plain class exposing a [StateFlow] and intent methods (no AndroidX
@@ -487,6 +487,23 @@ class AppModel(
         val current = _state.value.ledger ?: return@launch
         val moved = runCatching { repo.moveEntryToRecurring(current, entry, target, mode) }.getOrNull()
         _state.update { it.copy(ledger = moved?.first ?: it.ledger, notice = if (moved == null) Notice.CANNOT_MOVE else it.notice) }
+        _state.value.selectedAccount?.let { refreshFromCache(it) }
+    }
+
+    /** Renames the open group; says so when another group of the month already has that name. */
+    fun renameLedger(title: String) = scope.launch {
+        val current = _state.value.ledger ?: return@launch
+        if (title.isBlank()) return@launch
+        val renamed = runCatching { repo.renameLedger(current, title) }.getOrNull()
+        _state.update { it.copy(ledger = renamed ?: it.ledger, notice = if (renamed == null) Notice.CANNOT_RENAME else it.notice) }
+        _state.value.selectedAccount?.let { refreshFromCache(it) }
+    }
+
+    /** Files the open group under [category] (null for none). */
+    fun setLedgerCategory(category: String?) = scope.launch {
+        val current = _state.value.ledger ?: return@launch
+        val updated = runCatching { repo.setLedgerCategory(current, category) }.getOrNull() ?: return@launch
+        _state.update { it.copy(ledger = updated) }
         _state.value.selectedAccount?.let { refreshFromCache(it) }
     }
 

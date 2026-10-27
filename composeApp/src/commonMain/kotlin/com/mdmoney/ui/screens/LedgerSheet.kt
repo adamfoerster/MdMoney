@@ -30,6 +30,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -67,6 +72,7 @@ import com.mdmoney.ui.components.ReinoButtonVariant
 import com.mdmoney.ui.components.SectionBand
 import com.mdmoney.ui.components.chipRowScroll
 import com.mdmoney.ui.formatEntryDate
+import com.mdmoney.ui.mostUsedCategories
 import com.mdmoney.ui.theme.LocalReinoColors
 import com.mdmoney.ui.theme.LocalReinoType
 
@@ -92,6 +98,13 @@ fun LedgerSheet(model: AppModel, ledger: Ledger, categories: List<Category> = em
     var editing by remember { mutableStateOf<LedgerEntry?>(null) }
     // The pencil turns the entries into something to act on: tap one for move, edit and delete.
     var editMode by remember { mutableStateOf(false) }
+    var name by remember(ledger.title) { mutableStateOf(ledger.title) }
+    // Saves a changed name; an unchanged or blank one is dropped back to the stored title.
+    fun commitName() {
+        val typed = name.trim()
+        if (typed.isNotBlank() && typed != ledger.title) model.renameLedger(typed) else name = ledger.title
+    }
+    var pickingCategory by remember { mutableStateOf(false) }
     var acting by remember { mutableStateOf<LedgerEntry?>(null) }
     var moving by remember { mutableStateOf<LedgerEntry?>(null) }
     var merging by remember { mutableStateOf<Pair<LedgerEntry, Expense>?>(null) }
@@ -120,29 +133,62 @@ fun LedgerSheet(model: AppModel, ledger: Ledger, categories: List<Category> = em
         ) {
             // --- Header: month · category, group name ---
             val category = categoryTitle(ledger.category, categories)
-            Row(verticalAlignment = Alignment.Top) {
+            Row(verticalAlignment = Alignment.Bottom) {
                 Column(Modifier.weight(1f)) {
                     Text(
-                        "${s.month(ledger.month)} ${ledger.year}${category?.let { " · $it" } ?: ""}".uppercase(),
+                        "${s.month(ledger.month)} ${ledger.year}${category?.takeUnless { editMode }?.let { " · $it" } ?: ""}".uppercase(),
                         style = MaterialTheme.typography.labelMedium,
                         color = D.soft,
                         modifier = Modifier.padding(start = 4.dp),
                     )
-                    Text(
-                        ledger.title,
-                        style = MaterialTheme.typography.displayMedium.copy(fontSize = 32.sp, lineHeight = 34.sp),
-                        color = D.ink,
-                        modifier = Modifier.padding(start = 4.dp, top = 6.dp),
-                    )
+                    if (editMode) {
+                        BasicTextField(
+                            value = name,
+                            onValueChange = { name = it },
+                            singleLine = true,
+                            textStyle = MaterialTheme.typography.displayMedium.copy(fontSize = 26.sp, lineHeight = 30.sp, color = D.ink),
+                            cursorBrush = SolidColor(D.ink),
+                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                            keyboardActions = KeyboardActions(onDone = { commitName() }),
+                            modifier = Modifier.fillMaxWidth().padding(top = 6.dp).onFocusChanged { if (!it.isFocused) commitName() },
+                            decorationBox = { inner ->
+                                Box(
+                                    Modifier.fillMaxWidth().height(44.dp).box(D.field, D.fieldBorder, 8).padding(horizontal = 10.dp),
+                                    contentAlignment = Alignment.CenterStart,
+                                ) { inner() }
+                            },
+                        )
+                    } else {
+                        Text(
+                            ledger.title,
+                            style = MaterialTheme.typography.displayMedium.copy(fontSize = 32.sp, lineHeight = 34.sp),
+                            color = D.ink,
+                            modifier = Modifier.padding(start = 4.dp, top = 6.dp),
+                        )
+                    }
                 }
                 Box(
                     Modifier.size(44.dp).clip(RoundedCornerShape(999.dp))
                         .background(if (editMode) D.dark else Color.Transparent)
-                        .clickable { editMode = !editMode },
+                        .clickable { commitName(); editMode = !editMode },
                     contentAlignment = Alignment.Center,
                 ) { LineIcon(Icons24.Pencil, if (editMode) D.onDark else D.ink, size = 20.dp) }
-                Box(Modifier.size(44.dp).clip(RoundedCornerShape(999.dp)).clickable { model.closeLedger() }, contentAlignment = Alignment.Center) {
+                Box(Modifier.size(44.dp).clip(RoundedCornerShape(999.dp)).clickable { commitName(); model.closeLedger() }, contentAlignment = Alignment.Center) {
                     LineIcon(Icons24.Close, D.ink, size = 20.dp, strokeWidth = 2f)
+                }
+            }
+
+            // In edit mode the category is a control: it opens the same picker as the expense form.
+            if (editMode) {
+                Row(
+                    Modifier.padding(start = 4.dp, top = 10.dp).height(36.dp)
+                        .box(if (category == null) D.todo else D.field, if (category == null) D.todoBorder else D.fieldBorder, 999)
+                        .clickable { pickingCategory = true }.padding(horizontal = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text(category ?: s.uncategorized, style = MaterialTheme.typography.bodyMedium, color = D.ink, maxLines = 1)
+                    LineIcon(Icons24.ChevronDown, D.soft, size = 14.dp, strokeWidth = 2f)
                 }
             }
 
@@ -236,6 +282,24 @@ fun LedgerSheet(model: AppModel, ledger: Ledger, categories: List<Category> = em
                     Text("+  ${s.addEntry}", style = MaterialTheme.typography.bodyMedium.copy(fontSize = 15.sp), fontWeight = FontWeight.Medium, color = D.onDark)
                 }
             }
+        }
+    }
+
+    if (pickingCategory) {
+        ModalBottomSheet(
+            onDismissRequest = { pickingCategory = false },
+            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+            containerColor = D.bg,
+            shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+        ) {
+            CategoryPickerPage(
+                categories = categories,
+                mostUsed = mostUsedCategories(expenses),
+                selected = ledger.category,
+                onPick = { model.setLedgerCategory(it); pickingCategory = false },
+                onBack = { pickingCategory = false },
+                noneLabel = s.uncategorized,
+            )
         }
     }
 

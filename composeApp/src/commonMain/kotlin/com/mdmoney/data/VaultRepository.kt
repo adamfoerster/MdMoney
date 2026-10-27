@@ -356,6 +356,38 @@ class VaultRepository(
         ledger
     }
 
+    /**
+     * Renames the group [ledger] to [newTitle]: the note moves to `<year> <Mon> - <newTitle>.md`
+     * with everything in it kept. Returns the renamed group, or null — touching nothing — when the
+     * title is blank or another group of that month already has it.
+     */
+    suspend fun renameLedger(ledger: Ledger, newTitle: String): Ledger? = fileLock.withLock {
+        val title = Ledger.sanitizeTitle(newTitle)
+        val id = Ledger.idFor(ledger.year, ledger.month, title)
+        if (title.isBlank()) return@withLock null
+        if (id == ledger.id) return@withLock ledger
+        val taken = runCatching { storage.listNotes(ledger.account) }.getOrDefault(emptyList()).map { it.removeSuffix(".md") }
+        // Only the case differs: on a case-insensitive disk that is the same file, so it can't be "taken".
+        val sameFile = id.equals(ledger.id, ignoreCase = true)
+        if (!sameFile && taken.any { it.equals(id, ignoreCase = true) }) return@withLock null
+
+        val content = runCatching { storage.read(ledger.account, "${ledger.id}.md") }.getOrNull()
+        val renamed = ledger.copy(id = id, title = title)
+        val text = LedgerMapper.write(content, renamed, links)
+        if (sameFile) storage.delete(ledger.account, "${ledger.id}.md")
+        storage.write(ledger.account, "$id.md", text)
+        if (!sameFile) storage.delete(ledger.account, "${ledger.id}.md")
+        cache.upsertAll(listOf(renamed.toExpense()))
+        cache.deleteMissing(ledger.account, cache.ids(ledger.account).toSet() - ledger.id)
+        renamed
+    }
+
+    /** Files [ledger] under [category] (null for none); a category with no note yet gets one. */
+    suspend fun setLedgerCategory(ledger: Ledger, category: String?): Ledger {
+        category?.let { ensureCategories(listOf(it)) }
+        return saveLedger(ledger.copy(category = category))
+    }
+
     /** Instant read straight from the cache (may be empty until [syncAccount] runs). */
     suspend fun cachedExpenses(account: String): List<Expense> = cache.expenses(account)
 

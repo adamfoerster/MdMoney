@@ -130,6 +130,7 @@ interface Strings {
     val editGroup: String
     val tapEntryHint: String
     val cannotMoveNotice: String
+    val cannotRenameNotice: String
     val useAsValueHint: String
     val addToValueHint: String
     fun entryFrom(date: String, title: String): String

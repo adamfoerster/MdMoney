@@ -114,7 +114,13 @@ fun App(
                             onDismissRequest = { model.dismissNotice() },
                             text = {
                                 val s = LocalStrings.current
-                                Text(if (notice == Notice.CANNOT_MOVE) s.cannotMoveNotice else s.cannotGroupNotice)
+                                Text(
+                                    when (notice) {
+                                        Notice.CANNOT_MOVE -> s.cannotMoveNotice
+                                        Notice.CANNOT_RENAME -> s.cannotRenameNotice
+                                        Notice.CANNOT_GROUP -> s.cannotGroupNotice
+                                    },
+                                )
                             },
                             confirmButton = { TextButton(onClick = { model.dismissNotice() }) { Text("OK") } },
                         )
