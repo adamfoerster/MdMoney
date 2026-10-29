@@ -314,14 +314,28 @@ compose.desktop {
         mainClass = "com.mdmoney.MainKt"
 
         nativeDistributions {
-            targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
+            targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Exe, TargetFormat.Deb)
             packageName = "MdMoney"
             packageVersion = appVersion
 
             // Generated from icon/*.svg by scripts/GenerateIcons.java, like every other platform's icon.
             macOS { iconFile.set(project.file("icons/mdmoney.icns")) }
-            windows { iconFile.set(project.file("icons/mdmoney.ico")) }
+            windows {
+                iconFile.set(project.file("icons/mdmoney.ico"))
+                // Windows rejects a leading 0, so 0.x.y ships as 1.x.y there (installer metadata only).
+                packageVersion = "1.${appVersion.substringAfter('.')}"
+                // Never change: it lets a newer Windows installer upgrade the installed app in place.
+                upgradeUuid = "e02a7005-d65b-48e3-865c-df3c1857a41a"
+            }
             linux { iconFile.set(project.file("icons/mdmoney.png")) }
         }
     }
+}
+
+tasks.register<Copy>("windowsExe") {
+    group = "distribution"
+    description = "Builds the Windows installer (.exe) and copies it to composeApp/build/windows/."
+    dependsOn("packageExe")
+    from(layout.buildDirectory.dir("compose/binaries/main/exe")) { include("*.exe") }
+    into(layout.buildDirectory.dir("windows"))
 }
