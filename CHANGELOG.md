@@ -12,6 +12,20 @@ heading when you cut a release.
 
 ## [Unreleased]
 
+## [0.19.1] — 2026-11-05
+
+### Changed
+- **Desktop file pickers are now the system's own.** Choosing a PDF, a model file or the vault folder opens the native dialog on Windows and macOS instead of the old Java one. On Windows the vault *folder* picker still uses the classic Java dialog (now in the Windows look), since Java has no native folder dialog there. No vault format changed.
+
+
+## [0.19.0] — 2026-11-05
+
+### Changed
+- **Import review: file each line by kind of entry.** Under every line, the two dropdowns are now *kind* and *item*. The first opens a dialog to choose **income**, **one-off expense** or **recurring (fixed or variable)** — money received only offers income, money spent the other three — or *By category* to keep the old behaviour. Picking a kind opens the list of that kind's items in the account, with search, and a **New item** button (or *Create "…"* while typing) to make one; the second button then changes the item, and the first changes the kind. A new one-off or income item becomes a group as before; a new recurring item is created as a note of that type, shared by every line you file under it. One-offs also offer *No group (own note)*. No vault format changed.
+- **New category / New item** buttons are always active. *New category* with nothing typed puts the cursor in the name field. *New item* opens a short form: the **name** (starting from the line's description) and, for a **recurring fixed** bill, its **amount** (starting from the line's) and whether it repeats **every month or only some months**. The month the line belongs to keeps the amount actually charged. Variable, one-off and income items only ask for the name.
+- **The import's closing screen is redesigned**: a success header (*Statement imported — N entries saved to M items of the account*), the file with its period and currency, the money in and out of what was imported, and *Where they went* — each item with its kind, months and entries. Actions: *View account*, *Import another*, *Home* (and ✕ to leave).
+- With *By category* selected, the second button is the category picker (as before); with any other kind it is that kind's item picker.
+
 ## [0.18.0] — 2026-11-05
 
 ### Added

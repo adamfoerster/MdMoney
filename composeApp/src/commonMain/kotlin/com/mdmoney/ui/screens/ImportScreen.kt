@@ -34,8 +34,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -66,10 +64,11 @@ import com.mdmoney.LocalDecimalSeparator
 import com.mdmoney.LocalStrings
 import com.mdmoney.data.formatMoney
 import com.mdmoney.domain.Category
-import com.mdmoney.ui.mostUsedCategories
+import com.mdmoney.domain.ExpenseType
 import com.mdmoney.domain.categoryTitle
+import com.mdmoney.ui.mostUsedCategories
+import com.mdmoney.importer.AccountGroups
 import com.mdmoney.importer.ExtractionResult
-import com.mdmoney.importer.GroupChoice
 import com.mdmoney.importer.ImportPlanner
 import com.mdmoney.importer.Reconciliation
 import com.mdmoney.importer.ReviewRow
@@ -105,6 +104,10 @@ fun ImportScreen(model: AppModel, importer: StatementImportModel, app: UiState) 
     // Held above the review screen, so coming back from it lands where the list was left.
     val scroll = rememberScrollState()
 
+    (state.phase as? ImportPhase.Done)?.let {
+        ImportDoneScreen(model, importer, it)
+        return
+    }
     (state.phase as? ImportPhase.Review)?.takeIf { it.reviewing != null }?.let {
         AmountReviewScreen(importer, state, it)
         return
@@ -125,17 +128,8 @@ fun ImportScreen(model: AppModel, importer: StatementImportModel, app: UiState) 
                 ImportPhase.Pick -> PickPhase(model, importer, state, app.categories)
                 is ImportPhase.Reading -> ReadingPhase(importer, phase)
                 is ImportPhase.Review -> ReviewPhase(importer, state, phase, app)
-                is ImportPhase.Done -> {
-                    Text(
-                        s.importDone(phase.result.added, phase.result.skipped, phase.result.notes),
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = reino.ink,
-                    )
-                    Spacer(Modifier.height(20.dp))
-                    ReinoButton(s.home, onClick = { model.closeImport() }, trailingArrow = true)
-                    Spacer(Modifier.height(10.dp))
-                    ReinoButton(s.importAnother, onClick = { importer.backToPick() }, variant = ReinoButtonVariant.Secondary)
-                }
+                // Shown as a screen of its own, above.
+                is ImportPhase.Done -> Unit
                 is ImportPhase.Failed -> {
                     Eyebrow(phase.fileName ?: s.importStatement)
                     Text(
@@ -262,7 +256,7 @@ private fun PickPhase(model: AppModel, importer: StatementImportModel, state: Im
 }
 
 @Composable
-private fun SectionLabel(text: String) {
+internal fun SectionLabel(text: String) {
     Text(text.uppercase(), style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp), color = D.soft)
 }
 
@@ -476,7 +470,7 @@ private fun ReviewPhase(importer: StatementImportModel, state: ImportUiState, ph
     val mostUsed = mostUsedCategories(app.expenses)
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         state.rows.forEach { row ->
-            ReviewLine(row, app.categories, mostUsed, state.groups.forRow(row), importer)
+            ReviewLine(row, state.groups, app.categories, mostUsed, importer)
         }
     }
 
@@ -537,11 +531,18 @@ internal fun ReconciliationLines(r: Reconciliation) {
 }
 
 @Composable
-private fun ReviewLine(row: ReviewRow, categories: List<Category>, mostUsed: List<String>, groups: List<GroupChoice>, importer: StatementImportModel) {
+private fun ReviewLine(
+    row: ReviewRow,
+    accountGroups: AccountGroups,
+    categories: List<Category>,
+    mostUsed: List<String>,
+    importer: StatementImportModel,
+) {
     val s = LocalStrings.current
     val sep = LocalDecimalSeparator.current
     val reino = LocalReinoColors.current
     val muted = !row.selectable
+    var picker by remember(row.id) { mutableStateOf(OpenPicker.None) }
     Column(Modifier.fillMaxWidth().importCard().padding(14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             ReinoCheckbox(
@@ -601,81 +602,95 @@ private fun ReviewLine(row: ReviewRow, categories: List<Category>, mostUsed: Lis
             }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            CategoryPicker(row.category, categories, mostUsed, Modifier.weight(1f)) { importer.setCategory(row.id, it) }
-            GroupPicker(row.group, groups, Modifier.weight(1f)) { importer.setGroup(row.id, it) }
+            val type = row.entryType
+            PickerField(type?.let { s.typeName(it) } ?: s.groupFollowsCategory, todo = false, modifier = Modifier.weight(1f)) {
+                picker = OpenPicker.Type
+            }
+            // "By category": the second field is the category; otherwise an item of the chosen kind.
+            val itemLabel = when {
+                type == null -> categoryTitle(row.category, categories) ?: s.uncategorized
+                row.group == null -> s.chooseItem
+                row.group.standalone -> s.groupNone
+                else -> row.group.title
+            }
+            val todo = if (type == null) row.category == null else row.group == null
+            PickerField(itemLabel, todo = todo, modifier = Modifier.weight(1f)) { picker = OpenPicker.Item }
+        }
+    }
+    when (picker) {
+        OpenPicker.None -> Unit
+        OpenPicker.Type -> PickerSheet(onDismiss = { picker = OpenPicker.None }) {
+            EntryTypePickerPage(
+                types = ImportPlanner.typesFor(row),
+                selected = row.entryType,
+                autoLabel = s.groupFollowsCategory,
+                onPick = { chosen ->
+                    importer.setType(row.id, chosen)
+                    // Straight on to the second picker: that kind's items, or the categories.
+                    picker = OpenPicker.Item
+                },
+                onBack = { picker = OpenPicker.None },
+            )
+        }
+        OpenPicker.Item -> if (row.entryType == null) {
+            PickerSheet(onDismiss = { picker = OpenPicker.None }) {
+                CategoryPickerPage(
+                    categories = categories,
+                    mostUsed = mostUsed,
+                    selected = row.category,
+                    onPick = { importer.setCategory(row.id, it); picker = OpenPicker.None },
+                    onBack = { picker = OpenPicker.None },
+                    noneLabel = s.uncategorized,
+                )
+            }
+        } else row.entryType.let { type ->
+            PickerSheet(onDismiss = { picker = OpenPicker.None }) {
+                ItemPickerPage(
+                    type = type,
+                    items = accountGroups.forType(row, type),
+                    selected = row.group,
+                    allowStandalone = type == ExpenseType.EVENTUAL,
+                    suggestedName = row.description.trim(),
+                    suggestedAmount = row.tx.amount.takeIf { it > 0 },
+                    year = row.tx.date.year,
+                    onPick = { importer.setGroup(row.id, it); picker = OpenPicker.None },
+                    onBack = { picker = OpenPicker.None },
+                )
+            }
         }
     }
 }
 
-/** A bordered, dropdown-style field; [todo] paints it amber to flag a value still to be chosen. */
+/** A bordered, dropdown-looking field; [todo] paints it amber to flag a value still to be chosen. */
 @Composable
-private fun PickerBox(label: String, todo: Boolean, modifier: Modifier, menu: @Composable (close: () -> Unit) -> Unit) {
-    var open by remember { mutableStateOf(false) }
-    Box(modifier) {
-        Row(
-            Modifier.fillMaxWidth().height(44.dp)
-                .box(if (todo) D.todo else D.field, if (todo) D.todoBorder else D.fieldBorder, 8)
-                .clickable { open = true }.padding(horizontal = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            Text(label, style = MaterialTheme.typography.bodyMedium, color = D.ink, maxLines = 1, modifier = Modifier.weight(1f))
-            Text("▾", style = MaterialTheme.typography.bodySmall, color = D.soft)
-        }
-        DropdownMenu(expanded = open, onDismissRequest = { open = false }) { menu { open = false } }
-    }
-}
-
-/** The line's category as a field that opens the full picker — search, most used, and create a new one. */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun CategoryPicker(selected: String?, categories: List<Category>, mostUsed: List<String>, modifier: Modifier, onPick: (String?) -> Unit) {
-    val s = LocalStrings.current
-    var open by remember { mutableStateOf(false) }
+private fun PickerField(label: String, todo: Boolean, modifier: Modifier, dim: Boolean = false, onClick: () -> Unit) {
     Row(
         modifier.height(44.dp)
-            .box(if (selected == null) D.todo else D.field, if (selected == null) D.todoBorder else D.fieldBorder, 8)
-            .clickable { open = true }.padding(horizontal = 10.dp),
+            .box(if (todo) D.todo else D.field, if (todo) D.todoBorder else D.fieldBorder, 8)
+            .clickable(onClick = onClick).padding(horizontal = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
-        Text(categoryTitle(selected, categories) ?: s.uncategorized, style = MaterialTheme.typography.bodyMedium, color = D.ink, maxLines = 1, modifier = Modifier.weight(1f))
+        Text(
+            label, style = MaterialTheme.typography.bodyMedium, color = if (dim) D.soft else D.ink,
+            maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
+        )
         Text("▾", style = MaterialTheme.typography.bodySmall, color = D.soft)
-    }
-    if (open) {
-        ModalBottomSheet(
-            onDismissRequest = { open = false },
-            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-            containerColor = D.bg,
-            shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
-        ) {
-            CategoryPickerPage(
-                categories = categories,
-                mostUsed = mostUsed,
-                selected = selected,
-                onPick = { onPick(it); open = false },
-                onBack = { open = false },
-                noneLabel = s.uncategorized,
-            )
-        }
     }
 }
 
-/** Files the line under a group the account already has, instead of the one its category implies. */
+/** What each of the two pickers under a line has open: the kind of entry, or one item of that kind. */
+private enum class OpenPicker { None, Type, Item }
+
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun GroupPicker(selected: GroupChoice?, groups: List<GroupChoice>, modifier: Modifier, onPick: (GroupChoice?) -> Unit) {
-    val s = LocalStrings.current
-    PickerBox(
-        selected?.let { if (it.standalone) s.groupNone else it.title } ?: s.groupFollowsCategory,
-        todo = false,
-        modifier = modifier,
-    ) { close ->
-        DropdownMenuItem(text = { Text(s.groupFollowsCategory) }, onClick = { onPick(null); close() })
-        DropdownMenuItem(text = { Text(s.groupNone) }, onClick = { onPick(GroupChoice.NONE); close() })
-        groups.forEach { g ->
-            DropdownMenuItem(text = { Text(g.title) }, onClick = { onPick(g); close() })
-        }
-    }
+private fun PickerSheet(onDismiss: () -> Unit, content: @Composable () -> Unit) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = D.bg,
+        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+    ) { content() }
 }
 
 internal fun dateText(d: SimpleDate): String =

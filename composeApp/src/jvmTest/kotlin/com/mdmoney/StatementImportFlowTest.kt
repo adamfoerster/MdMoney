@@ -1,6 +1,7 @@
 package com.mdmoney
 
 import com.mdmoney.data.VaultRepository
+import com.mdmoney.domain.ExpenseType
 import com.mdmoney.domain.LedgerEntry
 import com.mdmoney.domain.Month
 import com.mdmoney.importer.ImportEntry
@@ -143,6 +144,54 @@ class StatementImportFlowTest {
         assertEquals(0, again.added)
         assertEquals(1, again.skipped)
         assertEquals(once, File(vault, "nubank/Walmart.md").readText(), "not a byte changed")
+    }
+
+    private fun intoNewRecurring(day: Int, note: String, amount: Double, type: ExpenseType) =
+        ImportEntry(2026, Month.AUG, "Netflix", null, income = false, LedgerEntry("202608${day.toString().padStart(2, '0')}", note, amount), newType = type)
+
+    @Test
+    fun a_new_recurring_item_is_created_as_a_note_of_that_type_and_shared_by_its_lines() = runBlocking {
+        val result = repo.importEntries(
+            account,
+            listOf(
+                intoNewRecurring(3, "Netflix jan", 39.9, ExpenseType.RECURRING_FIXED),
+                intoNewRecurring(20, "Netflix extra", 10.0, ExpenseType.RECURRING_FIXED),
+            ),
+        )
+
+        assertEquals(2, result.added)
+        assertEquals(1, result.notes, "one note, not one per line")
+        val text = File(vault, "nubank/Netflix.md").readText()
+        assertTrue("type: recurring-fixed" in text, text)
+        assertTrue("aug: 49.9" in text, "39.90 + 10.00: $text")
+        assertTrue("aug-paid: true" in text, text)
+        assertTrue(!vault.walkTopDown().any { it.name.startsWith("2026 Aug - Netflix") }, "no ledger was made")
+
+        val again = repo.importEntries(account, listOf(intoNewRecurring(3, "Netflix jan", 39.9, ExpenseType.RECURRING_FIXED)))
+        assertEquals(1, again.skipped, "re-importing the statement adds nothing")
+    }
+
+    @Test
+    fun a_new_fixed_bill_repeats_its_amount_in_the_chosen_months_and_the_line_replaces_its_own_month() = runBlocking {
+        val line = intoNewRecurring(3, "Netflix", 39.9, ExpenseType.RECURRING_FIXED)
+            .copy(newAmount = 45.0, newMonths = setOf(Month.JUL, Month.AUG, Month.SEP))
+        repo.importEntries(account, listOf(line))
+
+        val text = File(vault, "nubank/Netflix.md").readText()
+        assertTrue("jul: 45" in text && "sep: 45" in text, "the bill's amount in the other chosen months: $text")
+        assertTrue("aug: 39.9" in text, "the statement month holds what was really charged, not 45 + 39.90: $text")
+        assertTrue("aug-paid: true" in text && "jul-paid: false" in text, text)
+        assertTrue(Regex("""(?m)^(jan|jun|oct|dec):\s*$""").findAll(text).count() == 4, "months not chosen stay empty: $text")
+    }
+
+    @Test
+    fun a_new_recurring_item_never_overwrites_a_note_of_another_kind() = runBlocking {
+        File(vault, "nubank/Netflix.md").writeText(walmart.replace("Walmart", "Netflix"))
+        repo.importEntries(account, listOf(intoNewRecurring(3, "Netflix", 39.9, ExpenseType.RECURRING_FIXED)))
+
+        assertTrue("aug: 20.5" in File(vault, "nubank/Netflix.md").readText(), "the variable note is untouched")
+        val fixed = File(vault, "nubank/Netflix 2.md").readText()
+        assertTrue("type: recurring-fixed" in fixed && "aug: 39.9" in fixed, fixed)
     }
 
     @Test

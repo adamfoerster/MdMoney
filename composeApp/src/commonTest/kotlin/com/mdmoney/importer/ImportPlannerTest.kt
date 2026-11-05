@@ -125,6 +125,101 @@ class ImportPlannerTest {
         assertEquals(listOf(GroupChoice("Salario", "s26")), groups.forRow(income))
     }
 
+    private fun note(id: String, title: String, year: Int, ledger: Boolean, type: ExpenseType) =
+        Expense.empty("a", year, type).copy(id = id, title = title, ledger = ledger)
+
+    private val typed = AccountGroups(
+        listOf(
+            note("w26", "Walmart", 2026, false, ExpenseType.RECURRING_VARIABLE),
+            note("w25", "Walmart", 2025, false, ExpenseType.RECURRING_VARIABLE),
+            note("net26", "Netflix", 2026, false, ExpenseType.RECURRING_FIXED),
+            note("2026 Aug - Mercado", "Mercado", 2026, true, ExpenseType.EVENTUAL),
+            note("viagem", "Viagem", 2026, false, ExpenseType.EVENTUAL),
+            note("s26", "Salario", 2026, false, ExpenseType.INCOME),
+            note("2026 Aug - Bônus", "Bônus", 2026, true, ExpenseType.INCOME),
+        ),
+    )
+    private val spendRow = ImportPlanner.initialRows(listOf(tx(1, "x", 1.0, TxKind.PURCHASE)), emptyMap()).single()
+    private val incomeRow = ImportPlanner.initialRows(listOf(tx(1, "y", 1.0, TxKind.INCOME, Direction.CREDIT)), emptyMap()).single()
+
+    @Test
+    fun each_kind_lists_only_its_own_items() {
+        assertEquals(listOf(GroupChoice("Walmart", "w26")), typed.forType(spendRow, ExpenseType.RECURRING_VARIABLE), "this year's, variable only")
+        assertEquals(listOf(GroupChoice("Netflix", "net26")), typed.forType(spendRow, ExpenseType.RECURRING_FIXED))
+        assertEquals(listOf(GroupChoice("Mercado"), GroupChoice("Viagem", "viagem")), typed.forType(spendRow, ExpenseType.EVENTUAL))
+        assertEquals(listOf(GroupChoice("Bônus"), GroupChoice("Salario", "s26")), typed.forType(incomeRow, ExpenseType.INCOME))
+    }
+
+    @Test
+    fun money_in_can_only_be_income_and_money_out_never_is() {
+        assertEquals(listOf(ExpenseType.INCOME), ImportPlanner.typesFor(incomeRow))
+        assertEquals(
+            listOf(ExpenseType.EVENTUAL, ExpenseType.RECURRING_FIXED, ExpenseType.RECURRING_VARIABLE),
+            ImportPlanner.typesFor(spendRow),
+        )
+    }
+
+    @Test
+    fun changing_the_kind_drops_the_item_but_choosing_the_same_one_keeps_it() {
+        val filed = spendRow.copy(entryType = ExpenseType.RECURRING_FIXED, group = GroupChoice("Netflix", "net26"))
+        assertEquals(filed, ImportPlanner.withType(filed, ExpenseType.RECURRING_FIXED))
+        val moved = ImportPlanner.withType(filed, ExpenseType.EVENTUAL)
+        assertEquals(ExpenseType.EVENTUAL, moved.entryType)
+        assertNull(moved.group, "a recurring note is not a one-off group")
+        assertNull(ImportPlanner.withType(moved, null).entryType)
+    }
+
+    @Test
+    fun a_created_item_is_a_ledger_group_for_one_offs_and_a_note_to_make_for_recurring() {
+        assertEquals(GroupChoice("Viagem"), GroupChoice.created(" Viagem ", ExpenseType.EVENTUAL))
+        assertEquals(GroupChoice("Bônus"), GroupChoice.created("Bônus", ExpenseType.INCOME))
+        val fixed = GroupChoice.created("Netflix", ExpenseType.RECURRING_FIXED)
+        assertEquals(ExpenseType.RECURRING_FIXED, fixed.newType)
+
+        val entry = ImportPlanner.entries(
+            listOf(spendRow.copy(selected = true, entryType = ExpenseType.RECURRING_FIXED, group = fixed)),
+            emptyList(), "Importado", "Entradas",
+        ).single()
+        assertEquals("Netflix", entry.title)
+        assertEquals(ExpenseType.RECURRING_FIXED, entry.newType)
+        assertNull(entry.noteId)
+
+        val withTerms = GroupChoice.created("Netflix", ExpenseType.RECURRING_FIXED, 45.0, setOf(Month.JUL, Month.AUG))
+        val carried = ImportPlanner.entries(
+            listOf(spendRow.copy(selected = true, entryType = ExpenseType.RECURRING_FIXED, group = withTerms)),
+            emptyList(), "Importado", "Entradas",
+        ).single()
+        assertEquals(45.0, carried.newAmount)
+        assertEquals(setOf(Month.JUL, Month.AUG), carried.newMonths)
+        assertNull(GroupChoice.created("Walmart", ExpenseType.RECURRING_VARIABLE, 45.0, setOf(Month.JUL)).newAmount, "a variable bill has no fixed amount")
+    }
+
+    @Test
+    fun the_summary_adds_up_money_in_and_out_and_groups_lines_by_item() {
+        fun row(id: Int, day: Int, desc: String, amount: Double, dir: Direction = Direction.DEBIT, kind: TxKind = TxKind.PURCHASE, month: Int = 8) =
+            ReviewRow(id, StatementTransaction(SimpleDate(2026, month, day), desc, amount, dir, kind, null, null), true, desc, null, alreadyImported = false)
+        val netflix = GroupChoice("Netflix", "net26")
+        val rows = listOf(
+            row(0, 1, "Netflix jan", 39.9).copy(entryType = ExpenseType.RECURRING_FIXED, group = netflix),
+            row(1, 9, "Netflix extra", 10.0, month = 9).copy(entryType = ExpenseType.RECURRING_FIXED, group = netflix),
+            row(2, 2, "Padaria", 7.5),
+            row(3, 3, "Pix", 100.0, Direction.CREDIT, TxKind.INCOME),
+            row(4, 4, "Ignorada", 999.0).copy(selected = false),
+        )
+        val summary = ImportPlanner.summarize(rows, emptyList(), "Importado", "Entradas")
+
+        assertEquals(100.0, summary.credits)
+        assertEquals(57.4, summary.debits, "39.90 + 10 + 7.50, the unticked line left out")
+        assertEquals(4, summary.lines)
+        assertEquals(listOf("Entradas", "Netflix", "Importado"), summary.destinations.map { it.title })
+        val n = summary.destinations.single { it.title == "Netflix" }
+        assertEquals(2, n.lines)
+        assertEquals(49.9, n.total)
+        assertEquals(listOf(Month.AUG, Month.SEP), n.months)
+        assertEquals(ExpenseType.RECURRING_FIXED, n.type)
+        assertTrue(summary.destinations.single { it.title == "Entradas" }.income)
+    }
+
     @Test
     fun switching_account_reflags_without_losing_edits() {
         val rows = ImportPlanner.initialRows(lines, emptyMap()).map { if (it.id == 0) it.copy(description = "Feira") else it }

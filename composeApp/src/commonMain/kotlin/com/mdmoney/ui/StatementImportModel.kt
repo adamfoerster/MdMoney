@@ -5,6 +5,7 @@ import com.mdmoney.data.ImportRecord
 import com.mdmoney.data.VaultRepository
 import com.mdmoney.domain.Category
 import com.mdmoney.domain.Currency
+import com.mdmoney.domain.ExpenseType
 import com.mdmoney.domain.Month
 import com.mdmoney.platform.currentDay
 import com.mdmoney.platform.currentMonth
@@ -17,6 +18,8 @@ import com.mdmoney.importer.ImportModelPreset
 import com.mdmoney.importer.ImportPlanner
 import com.mdmoney.importer.ImportPlatform
 import com.mdmoney.importer.ImportResult
+import com.mdmoney.importer.ImportSummary
+import com.mdmoney.importer.StatementPeriod
 import com.mdmoney.importer.LocalLlm
 import com.mdmoney.importer.PickedPdf
 import com.mdmoney.importer.ReviewRow
@@ -74,7 +77,15 @@ sealed interface ImportPhase {
         /** The row being checked against the PDF (an index into the rows); null when not reviewing. */
         val reviewing: Int? = null,
     ) : ImportPhase
-    data class Done(val result: ImportResult) : ImportPhase
+    data class Done(
+        val result: ImportResult,
+        val summary: ImportSummary,
+        /** The statement the lines came from, and the account they went into. */
+        val fileName: String?,
+        val period: StatementPeriod?,
+        val currency: String?,
+        val account: String,
+    ) : ImportPhase
     data class Failed(val fileName: String?, val reason: String) : ImportPhase
 }
 
@@ -304,6 +315,9 @@ class StatementImportModel(
 
     fun setGroup(id: Int, group: GroupChoice?) = updateRow(id) { it.copy(group = group) }
 
+    /** Files the line under a kind of item (null: follow the category); the item is chosen next. */
+    fun setType(id: Int, type: ExpenseType?) = updateRow(id) { ImportPlanner.withType(it, type) }
+
     /** Ticks or unticks every row that can be imported (not already in the vault, not set to 0). */
     fun selectAll(selected: Boolean) = _state.update { st ->
         st.copy(rows = st.rows.map { if (it.selectable) it.copy(selected = selected) else it })
@@ -336,7 +350,9 @@ class StatementImportModel(
                     runCatching { repo.recordImport(account, record).imports }.getOrNull()
                 }
                 onImported(account)
-                _state.update { it.copy(phase = ImportPhase.Done(result), importing = false, recent = recent ?: it.recent) }
+                val summary = ImportPlanner.summarize(st.rows, categories, uncategorizedTitle, incomeTitle)
+                val done = ImportPhase.Done(result, summary, review?.fileName, review?.result?.header?.period, review?.result?.header?.currency, account)
+                _state.update { it.copy(phase = done, importing = false, recent = recent ?: it.recent) }
             } catch (e: Throwable) {
                 if (e is CancellationException) throw e
                 _state.update { it.copy(phase = ImportPhase.Failed(null, e.message ?: ""), importing = false) }

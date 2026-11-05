@@ -1,5 +1,6 @@
 package com.mdmoney.importer
 
+import com.mdmoney.domain.ExpenseType
 import com.mdmoney.domain.LedgerEntry
 import com.mdmoney.domain.Month
 import kotlin.math.round
@@ -22,6 +23,11 @@ data class ImportEntry(
     val noteId: String? = null,
     /** Set when the user filed the line under no group: it becomes a note of its own. */
     val standalone: Boolean = false,
+    /** Set when the user is creating a recurring item for the line: the note to make, of this type. */
+    val newType: ExpenseType? = null,
+    /** For a new fixed bill: its amount per month and the months it repeats in. */
+    val newAmount: Double? = null,
+    val newMonths: Set<Month> = emptySet(),
 )
 
 /** What an import did: rows written, rows already in the vault (skipped), notes touched. */

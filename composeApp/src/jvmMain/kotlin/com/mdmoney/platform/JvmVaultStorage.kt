@@ -5,7 +5,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.swing.Swing
 import kotlinx.coroutines.withContext
 import java.io.File
-import javax.swing.JFileChooser
 
 /** Desktop storage: a plain folder on disk, chosen via a Swing directory picker. */
 class JvmVaultStorage(
@@ -21,13 +20,8 @@ class JvmVaultStorage(
     override fun hasVault(): Boolean = root != null
 
     override suspend fun pickVault(): Boolean = withContext(Dispatchers.Swing) {
-        val chooser = JFileChooser().apply {
-            fileSelectionMode = JFileChooser.DIRECTORIES_ONLY
-            dialogTitle = "Selecione a pasta do vault"
-            root?.let { currentDirectory = it }
-        }
-        if (chooser.showOpenDialog(null) == JFileChooser.APPROVE_OPTION) {
-            val chosen = chooser.selectedFile
+        val chosen = NativeFileDialog.openDirectory("Selecione a pasta do vault", root)
+        if (chosen != null) {
             root = chosen
             prefs.set(KEY_VAULT, chosen.absolutePath)
             true

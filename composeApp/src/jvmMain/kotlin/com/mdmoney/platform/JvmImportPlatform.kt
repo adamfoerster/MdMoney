@@ -13,8 +13,6 @@ import org.apache.pdfbox.text.PDFTextStripper
 import java.io.ByteArrayOutputStream
 import java.io.File
 import javax.imageio.ImageIO
-import javax.swing.JFileChooser
-import javax.swing.filechooser.FileNameExtensionFilter
 
 /**
  * Desktop statement import: Swing pickers, PDFBox for text, models under `~/.mdmoney/models` and the
@@ -63,15 +61,8 @@ class JvmImportPlatform(
     override suspend fun pickModelFile(): String? = choose("GGUF", "gguf")?.absolutePath
 
     private suspend fun choose(label: String, extension: String): File? = withContext(Dispatchers.Swing) {
-        val chooser = JFileChooser().apply {
-            fileFilter = FileNameExtensionFilter(label, extension)
-            lastDir?.let { currentDirectory = it }
-        }
-        if (chooser.showOpenDialog(null) == JFileChooser.APPROVE_OPTION) {
-            chooser.selectedFile.also { lastDir = it.parentFile }
-        } else {
-            null
-        }
+        NativeFileDialog.openFile(title = label, label = label, extension = extension, startDir = lastDir)
+            ?.also { lastDir = it.parentFile }
     }
 
     companion object {

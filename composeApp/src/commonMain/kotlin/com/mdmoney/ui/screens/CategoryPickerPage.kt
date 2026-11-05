@@ -21,6 +21,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -28,6 +29,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
@@ -63,6 +66,10 @@ internal fun CategoryPickerPage(
     val shown = filterCategories(categories, query)
     val typed = resolveCategorySlug(query, categories)
     val exists = categories.any { it.slug == typed || it.title.equals(query.trim(), ignoreCase = true) }
+    // "New category" with nothing typed yet: ask for the name in the field above.
+    var nameAsks by remember { mutableStateOf(0) }
+    val focus = remember { FocusRequester() }
+    LaunchedEffect(nameAsks) { if (nameAsks > 0) focus.requestFocus() }
 
     Column(Modifier.fillMaxWidth()) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -92,9 +99,9 @@ internal fun CategoryPickerPage(
                     singleLine = true,
                     textStyle = MaterialTheme.typography.bodyLarge.copy(fontSize = 16.sp, color = D.ink),
                     cursorBrush = SolidColor(D.ink),
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().focusRequester(focus),
                 )
-                if (query.isEmpty()) Text(s.searchOrCreate, style = MaterialTheme.typography.bodyLarge.copy(fontSize = 16.sp), color = D.raw)
+                if (query.isEmpty()) Text(if (nameAsks > 0) s.newCategoryName else s.searchOrCreate, style = MaterialTheme.typography.bodyLarge.copy(fontSize = 16.sp), color = D.raw)
             }
         }
 
@@ -148,7 +155,7 @@ internal fun CategoryPickerPage(
             Row(
                 Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 12.dp).fillMaxWidth().height(52.dp)
                     .clip(RoundedCornerShape(10.dp)).dashedBox(Color(0xFF8A847A), 10)
-                    .clickable(enabled = typed != null) { typed?.let { onPick(it) } },
+                    .clickable(enabled = !exists || typed == null) { if (typed != null && !exists) onPick(typed) else nameAsks++ },
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
             ) {

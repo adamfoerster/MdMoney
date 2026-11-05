@@ -123,7 +123,7 @@ class VaultRepository(
                 entries.map { EntryKey.of(it.entry) },
                 ImportDedup.count(entriesIn(account, months)),
             )
-            val fresh = entries.filterIndexed { i, _ -> !present[i] }
+            val fresh = resolveNewRecurring(account, entries.filterIndexed { i, _ -> !present[i] })
 
             // Lines filed under a plain note (recurring or income) grow that note's month instead.
             var plainNotes = 0
@@ -171,6 +171,54 @@ class VaultRepository(
                 cache.upsertAll(listOf(ledger.toExpense()))
             }
             ImportResult(added = fresh.size, skipped = entries.size - fresh.size, notes = groups.size + plainNotes + alone.size)
+        }
+    }
+
+    /**
+     * Makes the recurring notes the user asked for while reviewing ([ImportEntry.newType]) and points
+     * their lines at them, so the plain-note path below does the rest. A note of that name already
+     * there (an earlier line of the same import, or one made meanwhile) is reused, not duplicated.
+     */
+    private suspend fun resolveNewRecurring(account: String, lines: List<ImportEntry>): List<ImportEntry> {
+        if (lines.none { it.newType != null && it.noteId == null }) return lines
+        val ids = mutableMapOf<Triple<Int, String, ExpenseType>, String>()
+        return lines.map { line ->
+            val type = line.newType
+            if (type == null || line.noteId != null || line.standalone) return@map line
+            val id = ids.getOrPut(Triple(line.year, line.title.lowercase(), type)) {
+                val base = sanitize(line.title).ifBlank { "Despesa" }
+                var candidate = base
+                var n = 2
+                while (true) {
+                    val content = runCatching { storage.read(account, "$candidate.md") }.getOrNull()
+                    if (content == null) {
+                        // The lines being filed supply their own months' amounts (see withAddedLines), so
+                        // those months start empty rather than at the bill's amount, or they'd count twice.
+                        val own = lines.filter { it.newType == type && it.noteId == null && it.year == line.year && it.title.equals(line.title, ignoreCase = true) }
+                            .map { it.month }.toSet()
+                        val repeats = if (type == ExpenseType.RECURRING_FIXED) {
+                            Month.ALL.associateWith { m -> if (m in line.newMonths && m !in own) line.newAmount else null }
+                        } else {
+                            Month.ALL.associateWith { null }
+                        }
+                        val note = Expense.empty(account, line.year, type).copy(
+                            id = candidate,
+                            title = line.title.trim().ifBlank { base },
+                            category = line.category,
+                            amounts = repeats,
+                        )
+                        storage.write(account, "$candidate.md", ExpenseMapper.write(null, null, note, links))
+                        break
+                    }
+                    // Reuse a plain note of the same kind; a ledger or another kind keeps its name.
+                    val same = !LedgerMapper.isLedger(content) &&
+                        ExpenseMapper.read(candidate, account, content, line.year).type == type
+                    if (same) break
+                    candidate = "$base ${n++}"
+                }
+                candidate
+            }
+            line.copy(noteId = id, newType = null)
         }
     }
 

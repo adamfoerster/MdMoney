@@ -65,6 +65,7 @@ interface Strings {
     val searchOrCreate: String
     val mostUsed: String
     val newCategory: String
+    val newCategoryName: String
     val amountPerMonth: String
     val repeatsIn: String
     val wholeYear: String
@@ -116,6 +117,13 @@ interface Strings {
     val addEntry: String
     val editEntry: String
     val groupNone: String
+    val entryTypeTitle: String
+    val chooseItem: String
+    val newItem: String
+    val createAndUse: String
+    val allItems: String
+    val noItemsYet: String
+    fun createItem(name: String): String
     val moveToGroup: String
     val moveOutOfGroup: String
     val newGroupLabel: String
@@ -235,6 +243,13 @@ interface Strings {
     fun readingTime(elapsed: String, remainingMinutes: Long?): String
     fun importSelected(count: Int): String
     fun importDone(added: Int, skipped: Int, notes: Int): String
+    val importedTitle: String
+    /** `**bold**` marks the account's name. */
+    fun importedSummary(lines: Int, items: Int, account: String): String
+    val whereTheyWent: String
+    fun viewAccount(account: String): String
+    fun linesCount(n: Int): String
+    fun skippedNotice(n: Int): String
     fun currencyMismatch(statement: String, account: String): String
     fun modelDownloading(percent: Int): String
     fun kindName(kind: TxKind): String

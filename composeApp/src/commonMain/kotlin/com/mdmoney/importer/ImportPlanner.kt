@@ -3,6 +3,7 @@ package com.mdmoney.importer
 import com.mdmoney.domain.Category
 import com.mdmoney.domain.Currency
 import com.mdmoney.domain.Expense
+import com.mdmoney.domain.ExpenseType
 import com.mdmoney.domain.LedgerEntry
 import com.mdmoney.domain.Month
 import com.mdmoney.domain.categoryTitle
@@ -16,6 +17,11 @@ data class ReviewRow(
     val category: String?,
     /** An existing group to file the line under; null follows the category. */
     val group: GroupChoice? = null,
+    /**
+     * The kind of item the line is filed under (income, one-off, recurring fixed or variable), chosen
+     * on the review screen; null follows the category. [group] is then an item of that kind.
+     */
+    val entryType: ExpenseType? = null,
     /** Already in the vault from an earlier import; never ticked by default. */
     val alreadyImported: Boolean,
 ) {
@@ -30,11 +36,46 @@ data class ReviewRow(
  * (a recurring bill or an income line) whose month grows by the line; without one it is a ledger
  * group, whose note for the line's month is found or created.
  */
-data class GroupChoice(val title: String, val noteId: String? = null, val standalone: Boolean = false) {
+data class GroupChoice(
+    val title: String,
+    val noteId: String? = null,
+    val standalone: Boolean = false,
+    /** Set on a recurring item the user is creating: the import makes the note, of this type. */
+    val newType: ExpenseType? = null,
+    /** A new fixed bill's amount per month, and the months it repeats in (the line's own month takes the line's amount). */
+    val newAmount: Double? = null,
+    val newMonths: Set<Month> = emptySet(),
+) {
     companion object {
         /** Under no group at all: the line becomes a note of its own. */
         val NONE = GroupChoice(title = "", standalone = true)
+
+        /** A brand-new item of [type] named [title]: a ledger group for one-offs and income, a note for recurring. */
+        fun created(title: String, type: ExpenseType, amount: Double? = null, months: Set<Month> = emptySet()): GroupChoice =
+            if (type == ExpenseType.RECURRING_FIXED) {
+                GroupChoice(title.trim(), newType = type, newAmount = amount, newMonths = months)
+            } else if (type == ExpenseType.RECURRING_VARIABLE) {
+                GroupChoice(title.trim(), newType = type)
+            } else {
+                GroupChoice(title.trim())
+            }
     }
+}
+
+/** Where some of an import's lines ended up: one item, its kind, the months and lines it took, their sum. */
+data class ImportDestination(
+    val title: String,
+    val type: ExpenseType,
+    val months: List<Month>,
+    val lines: Int,
+    val total: Double,
+) {
+    val income: Boolean get() = type == ExpenseType.INCOME
+}
+
+/** The closing screen's numbers: money received and spent by the imported lines, and where it went. */
+data class ImportSummary(val credits: Double, val debits: Double, val destinations: List<ImportDestination>) {
+    val lines: Int get() = destinations.sumOf { it.lines }
 }
 
 /** Everything an account holds that a statement line could be filed under. */
@@ -49,6 +90,25 @@ data class AccountGroups(val notes: List<Expense> = emptyList()) {
         val plain = kind.filter { !it.ledger && it.year == row.tx.date.year }.map { GroupChoice(it.title, it.id) }
         val ledgers = kind.filter { it.ledger }.map { GroupChoice(it.title) }
         return (plain + ledgers).distinctBy { it.title }.sortedBy { it.title.lowercase() }
+    }
+
+    /**
+     * The items of one [type] a line can go under. Income: the income notes and groups. One-off: the
+     * ledger groups and one-off notes. Recurring: the notes of exactly that type. A plain note only
+     * counts for the year of the line.
+     */
+    fun forType(row: ReviewRow, type: ExpenseType): List<GroupChoice> {
+        val year = row.tx.date.year
+        val items = when (type) {
+            ExpenseType.INCOME -> notes.filter { it.isIncome }
+            ExpenseType.EVENTUAL -> notes.filter { !it.isIncome && (it.ledger || it.type == ExpenseType.EVENTUAL) }
+            ExpenseType.RECURRING_FIXED, ExpenseType.RECURRING_VARIABLE -> notes.filter { !it.ledger && it.type == type }
+        }
+        return items
+            .filter { it.ledger || it.year == year }
+            .map { if (it.ledger) GroupChoice(it.title) else GroupChoice(it.title, it.id) }
+            .distinctBy { it.title }
+            .sortedBy { it.title.lowercase() }
     }
 }
 
@@ -95,12 +155,7 @@ object ImportPlanner {
         uncategorizedTitle: String,
         incomeTitle: String,
     ): List<ImportEntry> = rows.filter { it.selected && it.selectable }.map { row ->
-        val title = when {
-            row.group?.standalone == true -> row.description.trim()
-            row.group != null -> row.group.title
-            row.isIncome -> incomeTitle
-            else -> categoryTitle(row.category, categories) ?: uncategorizedTitle
-        }
+        val title = titleOf(row, categories, uncategorizedTitle, incomeTitle)
         ImportEntry(
             year = row.tx.date.year,
             month = Month.ALL.first { it.number == row.tx.date.month },
@@ -110,8 +165,58 @@ object ImportPlanner {
             entry = entryOf(row.tx, row.description),
             noteId = row.group?.noteId,
             standalone = row.group?.standalone == true,
+            newType = row.group?.newType,
+            newAmount = row.group?.newAmount,
+            newMonths = row.group?.newMonths.orEmpty(),
         )
     }
+
+    private fun titleOf(row: ReviewRow, categories: List<Category>, uncategorizedTitle: String, incomeTitle: String): String = when {
+        row.group?.standalone == true -> row.description.trim()
+        row.group != null -> row.group.title
+        row.isIncome -> incomeTitle
+        else -> categoryTitle(row.category, categories) ?: uncategorizedTitle
+    }
+
+    /**
+     * What an import did, for the closing screen: the money in and out of the ticked lines, and where
+     * they went — one destination per item (title and kind), with the months and lines it took.
+     * Biggest first; a line filed by category without a chosen kind is a one-off, or income.
+     */
+    fun summarize(
+        rows: List<ReviewRow>,
+        categories: List<Category>,
+        uncategorizedTitle: String,
+        incomeTitle: String,
+    ): ImportSummary {
+        val ticked = rows.filter { it.selected && it.selectable }
+        val destinations = ticked.groupBy { row ->
+            val type = row.entryType ?: if (row.isIncome) ExpenseType.INCOME else ExpenseType.EVENTUAL
+            type to titleOf(row, categories, uncategorizedTitle, incomeTitle).lowercase()
+        }.map { (key, group) ->
+            ImportDestination(
+                title = titleOf(group.first(), categories, uncategorizedTitle, incomeTitle),
+                type = key.first,
+                months = group.map { r -> Month.ALL.first { it.number == r.tx.date.month } }.distinct().sortedBy { it.number },
+                lines = group.size,
+                total = kotlin.math.round(group.sumOf { it.tx.amount } * 100) / 100,
+            )
+        }.sortedByDescending { it.total }
+        return ImportSummary(
+            credits = kotlin.math.round(ticked.filter { it.isIncome }.sumOf { it.tx.amount } * 100) / 100,
+            debits = kotlin.math.round(ticked.filter { !it.isIncome }.sumOf { it.tx.amount } * 100) / 100,
+            destinations = destinations,
+        )
+    }
+
+    /** The kinds of item a line may be filed under: money in is income, money out is anything else. */
+    fun typesFor(row: ReviewRow): List<ExpenseType> =
+        if (row.isIncome) listOf(ExpenseType.INCOME)
+        else listOf(ExpenseType.EVENTUAL, ExpenseType.RECURRING_FIXED, ExpenseType.RECURRING_VARIABLE)
+
+    /** [row] filed under [type]; changing the kind drops the item, which belonged to the old one. */
+    fun withType(row: ReviewRow, type: ExpenseType?): ReviewRow =
+        if (type == row.entryType) row else row.copy(entryType = type, group = null)
 
     /**
      * True when a total the statement prints disagrees with the lines read from it — the cue to go

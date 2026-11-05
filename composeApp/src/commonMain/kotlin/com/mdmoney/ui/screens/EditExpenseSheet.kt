@@ -214,7 +214,7 @@ private fun IconTap(icon: List<String>, description: String, onClick: () -> Unit
 }
 
 @Composable
-private fun Labelled(label: String, content: @Composable () -> Unit) {
+internal fun Labelled(label: String, content: @Composable () -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(label, style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp), fontWeight = FontWeight.SemiBold, color = D.ink)
         content()
@@ -222,7 +222,7 @@ private fun Labelled(label: String, content: @Composable () -> Unit) {
 }
 
 @Composable
-private fun SheetInput(value: String, onChange: (String) -> Unit, placeholder: String, modifier: Modifier = Modifier) {
+internal fun SheetInput(value: String, onChange: (String) -> Unit, placeholder: String, modifier: Modifier = Modifier) {
     Box(
         modifier.fillMaxWidth().height(48.dp).clip(RoundedCornerShape(10.dp)).background(D.card)
             .border(1.dp, Field, RoundedCornerShape(10.dp)).padding(horizontal = 14.dp),
@@ -241,7 +241,7 @@ private fun SheetInput(value: String, onChange: (String) -> Unit, placeholder: S
 }
 
 @Composable
-private fun MoneyInput(value: String, onChange: (String) -> Unit, symbol: String) {
+internal fun MoneyInput(value: String, onChange: (String) -> Unit, symbol: String) {
     Row(
         Modifier.fillMaxWidth().height(52.dp).clip(RoundedCornerShape(10.dp)).background(D.card)
             .border(1.dp, Field, RoundedCornerShape(10.dp)).padding(horizontal = 14.dp),
@@ -298,7 +298,7 @@ private fun TypeGrid(selected: ExpenseType, onSelect: (ExpenseType) -> Unit) {
 
 /** "Repeats in": whole year or a hand-picked set of months, with a one-line summary beneath. */
 @Composable
-private fun RepeatsIn(months: Set<Month>, onChange: (Set<Month>) -> Unit, summary: () -> String) {
+internal fun RepeatsIn(months: Set<Month>, onChange: (Set<Month>) -> Unit, summary: () -> String) {
     val s = LocalStrings.current
     var pick by remember { mutableStateOf(months.size != 12) }
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -323,7 +323,7 @@ private fun RepeatsIn(months: Set<Month>, onChange: (Set<Month>) -> Unit, summar
 
 /** Twelve month toggles, four to a row. [onToggle] gets the month that was tapped. */
 @Composable
-private fun MonthGrid(selected: Set<Month>, onToggle: (Month) -> Unit) {
+internal fun MonthGrid(selected: Set<Month>, onToggle: (Month) -> Unit) {
     val s = LocalStrings.current
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Month.ALL.chunked(4).forEach { row ->
@@ -351,7 +351,7 @@ private fun MonthGrid(selected: Set<Month>, onToggle: (Month) -> Unit) {
 }
 
 @Composable
-private fun Hint(text: String) {
+internal fun Hint(text: String) {
     Row(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(D.bar).padding(12.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
