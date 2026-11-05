@@ -244,11 +244,12 @@ class AppModel(
         _state.update { it.copy(accounts = accounts, loading = false) }
     }
 
-    fun createAccount(name: String, currency: Currency = Currency.NONE) = scope.launch {
+    fun createAccount(name: String, currency: Currency = Currency.NONE, initialBalance: Double? = null) = scope.launch {
         if (name.isBlank()) return@launch
         runCatching { repo.createAccount(name) }
         // Persist the chosen currency before opening, so the first paint already shows its symbol.
         if (currency.hasSymbol) runCatching { repo.setCurrency(name.trim(), currency) }
+        initialBalance?.let { runCatching { repo.setInitialBalance(name.trim(), thisYear, it) } }
         refreshAccounts().join()
         openAccount(name.trim())
     }

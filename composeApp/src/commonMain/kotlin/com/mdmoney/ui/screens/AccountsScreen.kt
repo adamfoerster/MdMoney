@@ -18,12 +18,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -48,14 +45,12 @@ import com.mdmoney.LocalDecimalSeparator
 import com.mdmoney.LocalStrings
 import com.mdmoney.data.formatMoney
 import com.mdmoney.data.parseAmount
-import com.mdmoney.domain.Currency
 import com.mdmoney.domain.Expense
 import com.mdmoney.domain.ExpenseType
 import com.mdmoney.ui.AccountSummary
 import com.mdmoney.ui.AppModel
 import com.mdmoney.ui.HomeTab
 import com.mdmoney.ui.UiState
-import com.mdmoney.ui.components.CurrencyPicker
 import com.mdmoney.ui.components.Icons24
 import com.mdmoney.ui.components.LineIcon
 import com.mdmoney.ui.components.ReinoCheckbox
@@ -139,40 +134,15 @@ fun AccountsScreen(model: AppModel, state: UiState) {
     }
 
     if (showAdd) {
-        var name by remember { mutableStateOf("") }
-        var currency by remember { mutableStateOf(Currency.NONE) }
-        AlertDialog(
-            onDismissRequest = { showAdd = false },
-            title = { Text(s.addAccount, style = MaterialTheme.typography.titleLarge) },
-            text = {
-                Column {
-                    OutlinedTextField(
-                        value = name,
-                        onValueChange = { name = it },
-                        singleLine = true,
-                        label = { Text(s.accountName) },
-                    )
-                    Text(
-                        s.currency,
-                        style = MaterialTheme.typography.labelLarge,
-                        color = D.soft,
-                        modifier = Modifier.padding(top = 16.dp, bottom = 4.dp),
-                    )
-                    CurrencyPicker(selected = currency, onSelect = { currency = it })
-                }
-            },
-            confirmButton = {
-                TextButton(enabled = name.isNotBlank(), onClick = { model.createAccount(name, currency); showAdd = false }) {
-                    Text(s.create)
-                }
-            },
-            dismissButton = { TextButton(onClick = { showAdd = false }) { Text(s.cancel) } },
+        NewAccountSheet(
+            onDismiss = { showAdd = false },
+            onCreate = { name, currency, balance -> model.createAccount(name, currency, balance); showAdd = false },
         )
     }
 }
 
-internal fun Modifier.dashedBox(color: Color, radius: Int): Modifier = drawBehind {
-    val stroke = Stroke(1.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(5.dp.toPx(), 4.dp.toPx())))
+internal fun Modifier.dashedBox(color: Color, radius: Int, width: Int = 1): Modifier = drawBehind {
+    val stroke = Stroke(width.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(5.dp.toPx(), 4.dp.toPx())))
     drawRoundRect(color, style = stroke, cornerRadius = CornerRadius(radius.dp.toPx()))
 }
 

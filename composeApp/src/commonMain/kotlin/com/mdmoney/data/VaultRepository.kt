@@ -448,6 +448,13 @@ class VaultRepository(
         return updated
     }
 
+    /** Notes [record] in the account's root note, so the statement shows as already imported. */
+    suspend fun recordImport(account: String, record: ImportRecord): AccountMeta {
+        val updated = accountMeta(account).withImport(record)
+        storage.writeRootFile("$account.md", updated.serialize())
+        return updated
+    }
+
     suspend fun setAccountTitle(account: String, title: String): AccountMeta {
         val updated = accountMeta(account).withTitle(title)
         storage.writeRootFile("$account.md", updated.serialize())

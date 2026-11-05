@@ -1,10 +1,14 @@
 package com.mdmoney.ui
 
 import com.mdmoney.data.AppSettings
+import com.mdmoney.data.ImportRecord
 import com.mdmoney.data.VaultRepository
 import com.mdmoney.domain.Category
 import com.mdmoney.domain.Currency
 import com.mdmoney.domain.Month
+import com.mdmoney.platform.currentDay
+import com.mdmoney.platform.currentMonth
+import com.mdmoney.platform.currentYear
 import com.mdmoney.importer.AccountGroups
 import com.mdmoney.importer.EntryKey
 import com.mdmoney.importer.ExtractionResult
@@ -16,6 +20,7 @@ import com.mdmoney.importer.ImportResult
 import com.mdmoney.importer.LocalLlm
 import com.mdmoney.importer.PickedPdf
 import com.mdmoney.importer.ReviewRow
+import com.mdmoney.importer.SimpleDate
 import com.mdmoney.importer.StatementExtractor
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -84,6 +89,8 @@ data class ImportUiState(
     val accountCurrency: Currency = Currency.NONE,
     /** That account's existing groups, for filing lines under one of them. */
     val groups: AccountGroups = AccountGroups(),
+    /** The statements already imported into that account (from its note), newest first. */
+    val recent: List<ImportRecord> = emptyList(),
     val importing: Boolean = false,
 )
 
@@ -209,12 +216,14 @@ class StatementImportModel(
     }
 
     private suspend fun loadCurrency(account: String) {
-        val currency = runCatching { repo.accountMeta(account).currency }.getOrDefault(Currency.NONE)
+        val meta = runCatching { repo.accountMeta(account) }.getOrNull()
+        val currency = meta?.currency ?: Currency.NONE
+        val recent = meta?.imports.orEmpty()
         // Read from the vault, not the open screen's list: the account being imported into needn't be
         // the open one, and that list only holds one year.
         val groups = runCatching { AccountGroups(repo.loadExpenses(account, fallbackYear())) }
             .getOrDefault(AccountGroups())
-        _state.update { if (it.account == account) it.copy(accountCurrency = currency, groups = groups) else it }
+        _state.update { if (it.account == account) it.copy(accountCurrency = currency, groups = groups, recent = recent) else it }
     }
 
     fun cancel() {
@@ -314,8 +323,20 @@ class StatementImportModel(
         scope.launch {
             try {
                 val result = repo.importEntries(account, entries)
+                // Remember the file in the account's note; a failure here must not undo the import.
+                val review = st.phase as? ImportPhase.Review
+                val recent = review?.let {
+                    val record = importRecordFor(
+                        it.fileName,
+                        it.result.header.period,
+                        st.rows.filter { r -> r.selected }.map { r -> r.tx.date },
+                        SimpleDate(currentYear(), currentMonth(), currentDay()),
+                        result.added + result.notes,
+                    )
+                    runCatching { repo.recordImport(account, record).imports }.getOrNull()
+                }
                 onImported(account)
-                _state.update { it.copy(phase = ImportPhase.Done(result), importing = false) }
+                _state.update { it.copy(phase = ImportPhase.Done(result), importing = false, recent = recent ?: it.recent) }
             } catch (e: Throwable) {
                 if (e is CancellationException) throw e
                 _state.update { it.copy(phase = ImportPhase.Failed(null, e.message ?: ""), importing = false) }

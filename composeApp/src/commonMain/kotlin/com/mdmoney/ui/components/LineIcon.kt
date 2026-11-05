@@ -49,5 +49,10 @@ object Icons24 {
     val Pencil = listOf("M4 20h4L19 9l-4-4L4 16z", "M13.5 6.5l4 4")
     val Trash = listOf("M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3")
     val MoveRight = listOf("M4 12h13M13 7l5 5-5 5", "M20 4v16")
+    val FileUp = listOf("M14 3H6a1 1 0 0 0 -1 1v16a1 1 0 0 0 1 1h12a1 1 0 0 0 1 -1V8z", "M14 3v5h5", "M12 17v-6M9 14l3-3 3 3")
+    val File = listOf("M14 3H6a1 1 0 0 0 -1 1v16a1 1 0 0 0 1 1h12a1 1 0 0 0 1 -1V8z", "M14 3v5h5")
+    val Lock = listOf("M7 11h10a2 2 0 0 1 2 2v6a2 2 0 0 1 -2 2H7a2 2 0 0 1 -2 -2v-6a2 2 0 0 1 2 -2z", "M8 11V8a4 4 0 0 1 8 0v3")
+    val Chip = listOf("M7 4h10a3 3 0 0 1 3 3v10a3 3 0 0 1 -3 3H7a3 3 0 0 1 -3 -3V7a3 3 0 0 1 3 -3z", "M9 9h6v6H9z")
+    val ArrowRight = listOf("M5 12h14M13 6l6 6-6 6")
     val Dots = listOf("M5 12h.01M12 12h.01M19 12h.01")
 }

@@ -13,6 +13,22 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.text.style.TextOverflow
+import com.mdmoney.data.ImportRecord
+import com.mdmoney.domain.Month
+import com.mdmoney.importer.ImportModelPreset
+import com.mdmoney.ui.components.Icons24
+import com.mdmoney.ui.components.LineIcon
+import com.mdmoney.ui.importDayLabel
+import com.mdmoney.ui.importPeriodLabel
+import com.mdmoney.ui.previousImport
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -106,7 +122,7 @@ fun ImportScreen(model: AppModel, importer: StatementImportModel, app: UiState) 
                 modifier = Modifier.padding(top = 8.dp, bottom = 16.dp),
             )
             when (val phase = state.phase) {
-                ImportPhase.Pick -> PickPhase(importer, state, app.categories)
+                ImportPhase.Pick -> PickPhase(model, importer, state, app.categories)
                 is ImportPhase.Reading -> ReadingPhase(importer, phase)
                 is ImportPhase.Review -> ReviewPhase(importer, state, phase, app)
                 is ImportPhase.Done -> {
@@ -164,22 +180,159 @@ private fun ImportActionBar(importer: StatementImportModel, state: ImportUiState
 }
 
 
+/** The start of an import: the file picker, how the PDF is read, how it works, and what came in before. */
 @Composable
-private fun PickPhase(importer: StatementImportModel, state: ImportUiState, categories: List<Category>) {
+private fun PickPhase(model: AppModel, importer: StatementImportModel, state: ImportUiState, categories: List<Category>) {
     val s = LocalStrings.current
-    val reino = LocalReinoColors.current
-    Text(s.importIntro, style = MaterialTheme.typography.bodyMedium, color = reino.inkSoft)
-    val notice = when (val status = state.modelStatus) {
-        ModelStatus.Ready -> null
+    Column(verticalArrangement = Arrangement.spacedBy(22.dp)) {
+        Text(s.importSubtitle, fontSize = 15.sp, lineHeight = 22.sp, color = D.soft)
+
+        // --- Picker ---
+        Column(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(D.card)
+                .dashedBox(Color(0xFFB8AE9A), 16, width = 2)
+                .clickable(role = Role.Button) { importer.pickAndRead(categories) }
+                .padding(start = 20.dp, end = 20.dp, top = 32.dp, bottom = 28.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            Box(Modifier.size(64.dp).clip(RoundedCornerShape(16.dp)).background(D.bar), contentAlignment = Alignment.Center) {
+                LineIcon(Icons24.FileUp, D.ink, size = 32.dp, strokeWidth = 1.5f)
+            }
+            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(s.choosePdf, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = D.ink)
+                Text(s.choosePdfHint, fontSize = 13.sp, color = D.soft, textAlign = TextAlign.Center)
+            }
+            Row(
+                Modifier.height(48.dp).clip(RoundedCornerShape(10.dp)).background(D.dark).padding(horizontal = 22.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(s.browseFiles, fontSize = 15.sp, fontWeight = FontWeight.Medium, color = D.onDark)
+                LineIcon(Icons24.ArrowRight, D.onDark, size = 16.dp, strokeWidth = 2f)
+            }
+        }
+
+        // --- Privacy + reader ---
+        Column(Modifier.fillMaxWidth().importCard()) {
+            Row(
+                Modifier.fillMaxWidth().background(D.tagIncome).padding(horizontal = 14.dp, vertical = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                LineIcon(Icons24.Lock, D.tagIncomeInk, size = 18.dp, modifier = Modifier.padding(top = 1.dp))
+                Text(boldMarked(s.importPrivacy), fontSize = 13.sp, lineHeight = 19.sp, color = D.tagIncomeInk)
+            }
+            Row(
+                Modifier.fillMaxWidth().heightIn(min = 56.dp).clickable(role = Role.Button) { model.openSettings() }
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                LineIcon(Icons24.Chip, D.soft, size = 20.dp)
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                    Text(boldMarked("${s.readerLabel}: **${readerName(state)}**"), fontSize = 14.sp, color = D.ink)
+                    Text(readerStatus(state), fontSize = 12.sp, lineHeight = 16.sp, color = D.soft)
+                }
+                Text(s.change, fontSize = 13.sp, color = D.soft)
+                LineIcon(Icons24.ChevronRight, Color(0xFF8A847A), size = 16.dp, strokeWidth = 2f)
+            }
+        }
+
+        // --- How it works ---
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            SectionLabel(s.howItWorks)
+            HowStep(1, s.howStep1Title, s.howStep1Text)
+            HowStep(2, s.howStep2Title, s.howStep2Text)
+            HowStep(3, s.howStep3Title, s.howStep3Text)
+        }
+
+        // --- Recent imports, remembered in the account's note ---
+        if (state.recent.isNotEmpty()) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                SectionLabel(s.recentImports)
+                Column(Modifier.fillMaxWidth().importCard()) {
+                    state.recent.forEachIndexed { i, record ->
+                        if (i > 0) Box(Modifier.fillMaxWidth().height(1.dp).background(D.rule))
+                        RecentImportRow(record)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SectionLabel(text: String) {
+    Text(text.uppercase(), style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp), color = D.soft)
+}
+
+@Composable
+private fun HowStep(n: Int, title: String, text: String) {
+    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.Top) {
+        Box(Modifier.size(26.dp).border(1.dp, Color(0xFFB8AE9A), RoundedCornerShape(999.dp)), contentAlignment = Alignment.Center) {
+            Text("$n", fontSize = 12.sp, color = D.soft)
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+            Text(title, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = D.ink)
+            Text(text, fontSize = 13.sp, lineHeight = 18.sp, color = D.soft)
+        }
+    }
+}
+
+@Composable
+private fun RecentImportRow(record: ImportRecord) {
+    val s = LocalStrings.current
+    val short = { m: Int -> s.monthShort(Month.ALL[m - 1]) }
+    Row(
+        Modifier.fillMaxWidth().heightIn(min = 60.dp).padding(horizontal = 14.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        LineIcon(Icons24.File, D.soft, size = 20.dp, strokeWidth = 1.6f)
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(
+                record.fileName,
+                style = MaterialTheme.typography.bodySmall.copy(fontFamily = MaterialTheme.typography.labelMedium.fontFamily, fontSize = 12.sp),
+                color = D.ink,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            importPeriodLabel(record.from, record.to, short)?.let { Text(it, fontSize = 12.sp, color = D.soft) }
+            Text(s.importedMeta(importDayLabel(record.on, short), record.added), fontSize = 12.sp, color = D.soft)
+        }
+    }
+}
+
+/** The reader the next import will use, by the name Settings gives it. */
+@Composable
+private fun readerName(state: ImportUiState): String {
+    val s = LocalStrings.current
+    return when {
+        state.modelStatus == ModelStatus.Unsupported -> s.readerSimple
+        state.model.preset == ImportModelPreset.ACCURATE -> s.modelAccurate
+        state.model.preset != null -> s.modelLight
+        else -> s.modelCustom
+    }
+}
+
+@Composable
+private fun readerStatus(state: ImportUiState): String {
+    val s = LocalStrings.current
+    return when (val status = state.modelStatus) {
+        ModelStatus.Ready -> s.modelReady
         ModelStatus.Unsupported -> s.modelUnsupported
         is ModelStatus.Downloading -> s.modelDownloading(percent(status.done, status.total))
+        ModelStatus.Verifying -> s.modelVerifying
+        is ModelStatus.Failed -> s.modelFailed
         else -> s.modelMissingNotice
     }
-    notice?.let {
-        Text(it, style = MaterialTheme.typography.bodySmall, color = reino.brassDeep, modifier = Modifier.padding(top = 12.dp))
+}
+
+/** `**bold**` runs of a string, so a translation can emphasise a phrase wherever it falls. */
+internal fun boldMarked(text: String): AnnotatedString = buildAnnotatedString {
+    text.split("**").forEachIndexed { i, part ->
+        if (i % 2 == 1) withStyle(SpanStyle(fontWeight = FontWeight.SemiBold)) { append(part) } else append(part)
     }
-    Spacer(Modifier.height(20.dp))
-    ReinoButton(s.choosePdf, onClick = { importer.pickAndRead(categories) }, trailingArrow = true)
 }
 
 @Composable
@@ -235,6 +388,15 @@ private fun ReviewPhase(importer: StatementImportModel, state: ImportUiState, ph
             style = MaterialTheme.typography.bodyMedium,
             color = D.soft,
             modifier = Modifier.padding(top = 8.dp),
+        )
+    }
+
+    previousImport(state.recent, phase.fileName)?.let { before ->
+        Text(
+            s.alreadyImportedNotice(importDayLabel(before.on) { m -> s.monthShort(Month.ALL[m - 1]) }),
+            style = MaterialTheme.typography.bodySmall,
+            color = D.noteInk,
+            modifier = Modifier.padding(top = 12.dp).fillMaxWidth().box(D.noteBg, D.noteBorder, 10).padding(12.dp),
         )
     }
 

@@ -115,6 +115,18 @@ initial-2026: 1200
 `title:` is what the `account:` links display; the folder name remains the account's identity, which
 is why the two are free to differ in casing.
 
+Statement import also remembers what it brought in, as an `imports:` list in the same note, newest
+first and capped at 20 — one quoted item per file, `file | period start | period end | imported on |
+lines added` (a period the statement did not print is `-`):
+
+```yaml
+imports:
+  - "Fatura_08.pdf | 2026-07-24 | 2026-08-21 | 2026-11-05 | 24"
+```
+
+Importing a file of the same name again replaces its item. It is a reminder for you, not a lock: the
+duplicate check still goes by the lines themselves.
+
 Statement import can also file a line under an existing **plain** note (a recurring bill or an income
 line) instead of a ledger. The note stays a plain note: the line's amount is added to that month's
 value, the month is marked paid/received, and the line itself is appended to a `| Date | Note |

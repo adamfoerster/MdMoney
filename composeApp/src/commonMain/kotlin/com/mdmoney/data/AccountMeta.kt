@@ -60,10 +60,40 @@ class AccountMeta private constructor(
         return this
     }
 
+    /** The statements imported into this account, newest first. */
+    val imports: List<ImportRecord>
+        get() = importLines().mapNotNull { ImportRecord.decode(it) }
+
+    /**
+     * Returns this same instance with [record] on top of the `imports:` list. Importing a file of the
+     * same name again replaces its earlier entry rather than listing it twice, the list is capped at
+     * [MAX_IMPORTS], and lines this app does not understand are kept as they were.
+     */
+    fun withImport(record: ImportRecord): AccountMeta {
+        if (!note.hasKey("type")) note.setScalar("type", "account")
+        note.setScalar("account", account)
+        val kept = importLines().filter { ImportRecord.decode(it)?.fileName != record.fileName }
+        val lines = listOf(itemLine(record)) + kept.map { "  - ${it.trim().removePrefix("-").trim()}" }
+        val entry = FmEntry.Raw(IMPORTS_KEY, listOf("$IMPORTS_KEY:") + lines.take(MAX_IMPORTS))
+        val idx = note.indexOfKey(IMPORTS_KEY)
+        if (idx >= 0) note.entries[idx] = entry else note.entries.add(entry)
+        return this
+    }
+
+    private fun itemLine(record: ImportRecord) = "  - \"${record.encode()}\""
+
+    /** The raw items of the `imports:` block, without the key line. */
+    private fun importLines(): List<String> =
+        (note.entries.firstOrNull { it.key == IMPORTS_KEY } as? FmEntry.Raw)?.lines?.drop(1).orEmpty()
+
     fun serialize(): String = FrontmatterParser.serialize(note)
 
     companion object {
         private const val CURRENCY_KEY = "currency"
+        private const val IMPORTS_KEY = "imports"
+
+        /** How many past imports the note remembers. */
+        const val MAX_IMPORTS = 20
         private fun key(year: Int) = "initial-$year"
 
         fun read(account: String, content: String?): AccountMeta {

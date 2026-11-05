@@ -83,6 +83,13 @@ interface Strings {
     val showAmounts: String
     val initialBalance: String
     val setInitialBalance: String
+    val createAccount: String
+    val accountNameHint: String
+    val optional: String
+    val noSymbol: String
+    val balanceInCredit: String
+    val balanceOverdrawn: String
+    val balanceLeaveBlank: String
     val addOneOff: String
     val thisMonth: String
     val switchAccount: String
@@ -168,6 +175,22 @@ interface Strings {
     val importStatement: String
     val importIntro: String
     val choosePdf: String
+    val importSubtitle: String
+    val choosePdfHint: String
+    val browseFiles: String
+    val importPrivacy: String
+    val readerLabel: String
+    val readerSimple: String
+    val howItWorks: String
+    val howStep1Title: String
+    val howStep1Text: String
+    val howStep2Title: String
+    val howStep2Text: String
+    val howStep3Title: String
+    val howStep3Text: String
+    val recentImports: String
+    fun importedMeta(date: String, lines: Int): String
+    fun alreadyImportedNotice(date: String): String
     val readingPdf: String
     val loadingModel: String
     val simpleModeNotice: String

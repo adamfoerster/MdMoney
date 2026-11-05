@@ -12,6 +12,19 @@ heading when you cut a release.
 
 ## [Unreleased]
 
+## [0.18.0] — 2026-11-05
+
+### Added
+- **Import history.** Every statement you import is now remembered in the account's own note, so you can tell which files already came in. The start of the import screen lists the *Recent imports* (file name, the period the statement covers, the day it was imported and how many lines it added), and the review warns when a file with the same name was imported before. The list keeps the 20 latest; importing the same file name again replaces its entry. In the vault it is an `imports:` list in `<Account>.md` — a new key older versions simply preserve, so existing vaults read as before.
+
+### Changed
+- **The import start screen is redesigned**: a large *Choose a PDF* area, the privacy note, the reader in use (tap to change it in Settings) and a short *How it works*.
+
+## [0.17.0] — 2026-11-05
+
+### Added
+- **New account dialog, redesigned.** Creating an account now opens a bottom sheet: the account name, the currency as cards (Real, Dollar, Euro, None, or a custom symbol you type) and an optional **opening balance** with an *In credit* / *Overdrawn* toggle, so a new account can start with its balance already set for the current year. Leaving the balance blank keeps the old behaviour (set it later from Home). No change to the vault format.
+
 ## [0.16.0] — 2026-10-27
 
 ### Added
