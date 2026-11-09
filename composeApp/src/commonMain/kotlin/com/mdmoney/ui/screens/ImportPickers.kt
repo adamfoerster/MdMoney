@@ -80,6 +80,9 @@ internal fun EntryTypePickerPage(
     autoLabel: String,
     onPick: (ExpenseType?) -> Unit,
     onBack: () -> Unit,
+    /** When set, a last row files the line as a transfer to (or from) another account. */
+    transferSelected: Boolean = false,
+    onTransfer: (() -> Unit)? = null,
 ) {
     val s = LocalStrings.current
     Column(Modifier.fillMaxWidth().padding(bottom = 24.dp)) {
@@ -90,16 +93,60 @@ internal fun EntryTypePickerPage(
         ) {
             val rows: List<Pair<ExpenseType?, String>> = listOf<Pair<ExpenseType?, String>>(null to autoLabel) +
                 types.map { it to s.typeName(it) }
-            rows.forEachIndexed { i, (type, label) ->
-                val on = type == selected
+            val all = rows.map { Triple(it.first, it.second, false) } +
+                (if (onTransfer != null) listOf(Triple<ExpenseType?, String, Boolean>(null, s.transferLabel, true)) else emptyList())
+            all.forEachIndexed { i, (type, label, isTransfer) ->
+                val on = if (isTransfer) transferSelected else !transferSelected && type == selected
                 if (i > 0) Box(Modifier.fillMaxWidth().height(1.dp).background(D.rule))
                 Row(
                     Modifier.fillMaxWidth().heightIn(min = 56.dp).background(if (on) D.accountBg else Color.Transparent)
-                        .clickable { onPick(type) }.padding(horizontal = 14.dp),
+                        .clickable { if (isTransfer) onTransfer?.invoke() else onPick(type) }.padding(horizontal = 14.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
                         label,
+                        style = MaterialTheme.typography.bodyLarge.copy(fontSize = 16.sp),
+                        fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal,
+                        color = D.ink,
+                        modifier = Modifier.weight(1f),
+                    )
+                    if (on) LineIcon(Icons24.Check, Plum, size = 18.dp, strokeWidth = 2.4f)
+                }
+            }
+        }
+    }
+}
+
+/** The account on the other side of a transfer line, to pick from [accounts]. */
+@Composable
+internal fun TransferAccountPage(
+    title: String,
+    accounts: List<String>,
+    selected: String?,
+    onPick: (String) -> Unit,
+    onBack: () -> Unit,
+) {
+    val s = LocalStrings.current
+    Column(Modifier.fillMaxWidth().padding(bottom = 24.dp)) {
+        PickerHeader(title, onBack)
+        if (accounts.isEmpty()) {
+            Text(s.noOtherAccounts, style = MaterialTheme.typography.bodyMedium, color = D.soft, modifier = Modifier.padding(20.dp))
+            return
+        }
+        Column(
+            Modifier.padding(start = 16.dp, end = 16.dp, top = 14.dp).fillMaxWidth().clip(RoundedCornerShape(12.dp))
+                .background(D.card).border(1.dp, D.cardBorder, RoundedCornerShape(12.dp)),
+        ) {
+            accounts.forEachIndexed { i, account ->
+                val on = account == selected
+                if (i > 0) Box(Modifier.fillMaxWidth().height(1.dp).background(D.rule))
+                Row(
+                    Modifier.fillMaxWidth().heightIn(min = 56.dp).background(if (on) D.accountBg else Color.Transparent)
+                        .clickable { onPick(account) }.padding(horizontal = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        account,
                         style = MaterialTheme.typography.bodyLarge.copy(fontSize = 16.sp),
                         fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal,
                         color = D.ink,

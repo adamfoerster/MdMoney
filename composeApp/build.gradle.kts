@@ -91,13 +91,13 @@ val llamaAndroidJniLibs = layout.buildDirectory.dir("generated/llamaJniLibs")
 
 kotlin {
     /**
-     * Every JVM-flavoured target is built with **JDK 21**, whichever JDK happens to run Gradle:
+     * Every JVM-flavoured target is built with **JDK 25**, whichever JDK happens to run Gradle:
      * Gradle picks (or provisions) the toolchain, so desktop, Android and the tests compile the same
      * way on every machine. `gradle/gradle-daemon-jvm.properties` asks for the same version for the
      * daemon itself. The `jvmTarget`s below and Android's `compileOptions` must stay on 21 with it —
      * a mismatch between the Kotlin and Java halves fails the Android build outright.
      */
-    jvmToolchain(21)
+    jvmToolchain(25)
 
     // Desktop and Android share the statement-import engine (java-llama.cpp) and its file plumbing.
     @OptIn(ExperimentalKotlinGradlePluginApi::class)
@@ -120,7 +120,7 @@ kotlin {
     jvm {
         @OptIn(ExperimentalKotlinGradlePluginApi::class)
         compilerOptions {
-            jvmTarget.set(JvmTarget.JVM_21)
+            jvmTarget.set(JvmTarget.JVM_25)
         }
     }
 

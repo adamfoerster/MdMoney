@@ -51,6 +51,8 @@ fun OneOffSheet(model: AppModel, state: OneOffState) {
     var date by remember { mutableStateOf(state.date) }
     var note by remember { mutableStateOf("") }
     var amount by remember { mutableStateOf("") }
+    var transfer by remember { mutableStateOf(false) }
+    var target by remember { mutableStateOf(state.otherAccounts.singleOrNull()) }
 
     ModalBottomSheet(onDismissRequest = { model.closeOneOff() }, sheetState = sheetState) {
         // The fields, chips and the Save button add up to more than the sheet's height on a phone;
@@ -75,42 +77,64 @@ fun OneOffSheet(model: AppModel, state: OneOffState) {
                 modifier = Modifier.padding(bottom = 12.dp),
             )
 
-            OutlinedTextField(
-                value = group,
-                onValueChange = { group = it },
-                label = { Text(s.groupLabel) },
-                supportingText = { Text(s.groupHint) },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+            FilterChip(
+                selected = transfer,
+                onClick = { transfer = !transfer },
+                label = { Text(s.transferLabel) },
+                modifier = Modifier.padding(bottom = 6.dp),
             )
-            // Reuse a group already in this account instead of retyping it.
-            if (state.knownGroups.isNotEmpty()) {
+            if (transfer) {
+                Text(
+                    if (state.otherAccounts.isEmpty()) s.noOtherAccounts else s.transferHint,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = reino.inkSoft,
+                    modifier = Modifier.padding(bottom = 6.dp),
+                )
+                Eyebrow(s.transferToLabel)
                 Row(Modifier.chipRowScroll(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    state.knownGroups.forEach { g ->
-                        FilterChip(selected = group == g, onClick = { group = g }, label = { Text(g) })
+                    state.otherAccounts.forEach { a ->
+                        FilterChip(selected = target == a, onClick = { target = a }, label = { Text(a) })
                     }
                 }
-            }
+            } else {
+                OutlinedTextField(
+                    value = group,
+                    onValueChange = { group = it },
+                    label = { Text(s.groupLabel) },
+                    supportingText = { Text(s.groupHint) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                )
+                // Reuse a group already in this account instead of retyping it.
+                if (state.knownGroups.isNotEmpty()) {
+                    Row(Modifier.chipRowScroll(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        state.knownGroups.forEach { g ->
+                            FilterChip(selected = group == g, onClick = { group = g }, label = { Text(g) })
+                        }
+                    }
+                }
 
-            OutlinedTextField(
-                value = category,
-                onValueChange = { category = it },
-                label = { Text(s.categoryLabel) },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
-            )
-            // Chips carry a category's title; typing one that already exists lands on it rather
-            // than forking a second note meaning the same thing (see `resolveCategorySlug`).
-            if (state.knownCategories.isNotEmpty()) {
-                Row(Modifier.chipRowScroll(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    state.knownCategories.forEach { c ->
-                        FilterChip(
-                            selected = category.trim().equals(c.title, ignoreCase = true),
-                            onClick = { category = c.title },
-                            label = { Text(c.title) },
-                        )
+                OutlinedTextField(
+                    value = category,
+                    onValueChange = { category = it },
+                    label = { Text(s.categoryLabel) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                )
+                // Chips carry a category's title; typing one that already exists lands on it rather
+                // than forking a second note meaning the same thing (see `resolveCategorySlug`).
+                if (state.knownCategories.isNotEmpty()) {
+                    Row(Modifier.chipRowScroll(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        state.knownCategories.forEach { c ->
+                            FilterChip(
+                                selected = category.trim().equals(c.title, ignoreCase = true),
+                                onClick = { category = c.title },
+                                label = { Text(c.title) },
+                            )
+                        }
                     }
                 }
+
             }
 
             OutlinedTextField(
@@ -140,9 +164,14 @@ fun OneOffSheet(model: AppModel, state: OneOffState) {
 
             Button(
                 onClick = {
-                    model.saveOneOff(group, resolveCategorySlug(category, state.knownCategories), date, note, parseAmount(amount))
+                    val to = target
+                    if (transfer && to != null) {
+                        model.saveTransfer(to, s.transferOutTitle(to), s.transferInTitle(model.state.value.selectedAccount ?: ""), date, note, parseAmount(amount))
+                    } else {
+                        model.saveOneOff(group, resolveCategorySlug(category, state.knownCategories), date, note, parseAmount(amount))
+                    }
                 },
-                enabled = group.isNotBlank() && parseAmount(amount) != null && date.length == 8,
+                enabled = (if (transfer) target != null else group.isNotBlank()) && parseAmount(amount) != null && date.length == 8,
                 modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
             ) { Text(s.save) }
         }

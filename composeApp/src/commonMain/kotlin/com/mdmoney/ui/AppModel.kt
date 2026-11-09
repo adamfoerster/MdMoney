@@ -68,6 +68,8 @@ data class OneOffState(
      * saving returns to that ledger with the new purchase in it rather than dropping back to the list.
      */
     val reopenLedger: Boolean = false,
+    /** The other accounts of the vault, which a transfer can go to. */
+    val otherAccounts: List<String> = emptyList(),
 )
 
 data class UiState(
@@ -407,8 +409,24 @@ class AppModel(
                 knownGroups = st.expenses.filter { it.ledger }.map { it.title }.distinct().sorted(),
                 knownCategories = st.categories,
                 reopenLedger = reopenLedger,
+                otherAccounts = st.accounts.filter { it != st.selectedAccount },
             ),
         )
+    }
+
+    /**
+     * Transfers [amount] (sign ignored) from the open account to [to]: it is spent here and received
+     * there. [outTitle] and [inTitle] name the two groups the rows land in.
+     */
+    fun saveTransfer(to: String, outTitle: String, inTitle: String, date: String, note: String, amount: Double?) = scope.launch {
+        val account = _state.value.selectedAccount ?: return@launch
+        val month = _state.value.oneOff?.month ?: _state.value.homeMonth
+        val year = _state.value.year
+        _state.update { it.copy(oneOff = null) }
+        if (amount == null) return@launch
+        runCatching { repo.addTransfer(account, to, year, month, outTitle, inTitle, date, note.trim(), amount) }
+        refreshFromCache(account)
+        refreshSummary(to)
     }
 
     fun closeOneOff() = _state.update { it.copy(oneOff = null) }

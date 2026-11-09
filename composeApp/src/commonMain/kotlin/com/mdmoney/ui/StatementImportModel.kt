@@ -20,6 +20,7 @@ import com.mdmoney.importer.ImportPlatform
 import com.mdmoney.importer.ImportResult
 import com.mdmoney.importer.ImportSummary
 import com.mdmoney.importer.StatementPeriod
+import com.mdmoney.importer.TransferEntry
 import com.mdmoney.importer.LocalLlm
 import com.mdmoney.importer.PickedPdf
 import com.mdmoney.importer.ReviewRow
@@ -129,6 +130,9 @@ class StatementImportModel(
 
     /** What the chosen account already holds, for re-checking duplicates when an amount is corrected. */
     private var existing: Map<EntryKey, Int> = emptyMap()
+
+    /** The rows of that account marked as one side of a transfer, to recognise the other side's lines. */
+    private var transfers: List<TransferEntry> = emptyList()
 
     init {
         refreshModelStatus()
@@ -250,8 +254,15 @@ class StatementImportModel(
         if (rows.isEmpty()) return@launch
         val months = rows.map { it.tx.date.year to Month.ALL.first { m -> m.number == it.tx.date.month } }.toSet()
         val existing = runCatching { repo.existingEntryCounts(account, months) }.getOrDefault(emptyMap())
+        val transfers = runCatching { repo.existingTransfers(account, months) }.getOrDefault(emptyList())
         this@StatementImportModel.existing = existing
-        _state.update { it.copy(rows = ImportPlanner.markExisting(it.rows, existing)) }
+        this@StatementImportModel.transfers = transfers
+        // A transfer to the account that is now the target makes no sense: it would be to itself.
+        _state.update {
+            it.copy(rows = ImportPlanner.markExisting(it.rows, existing, transfers).map { r ->
+                if (r.transferAccount == account) r.copy(transferAccount = null) else r
+            })
+        }
     }
 
     /** Picks a PDF and reads it, with the model when one is ready and the simple parser otherwise. */
@@ -288,12 +299,14 @@ class StatementImportModel(
                 val account = _state.value.account
                 val months = result.transactions.map { it.date.year to Month.ALL.first { m -> m.number == it.date.month } }.toSet()
                 val existing = account?.let { runCatching { repo.existingEntryCounts(it, months) }.getOrNull() }.orEmpty()
+                val transfers = account?.let { runCatching { repo.existingTransfers(it, months) }.getOrNull() }.orEmpty()
                 this@StatementImportModel.pdf = pdf
                 this@StatementImportModel.existing = existing
+                this@StatementImportModel.transfers = transfers
                 _state.update {
                     it.copy(
                         phase = ImportPhase.Review(pdf.name, result, pageCount = pages.size),
-                        rows = ImportPlanner.initialRows(result.transactions, existing),
+                        rows = ImportPlanner.initialRows(result.transactions, existing, transfers),
                     )
                 }
             } catch (e: CancellationException) {
@@ -318,6 +331,11 @@ class StatementImportModel(
     /** Files the line under a kind of item (null: follow the category); the item is chosen next. */
     fun setType(id: Int, type: ExpenseType?) = updateRow(id) { ImportPlanner.withType(it, type) }
 
+    /** Files the line as a transfer (the account on the other side is chosen next). */
+    fun setTransfer(id: Int) = updateRow(id) { ImportPlanner.asTransfer(it) }
+
+    fun setTransferAccount(id: Int, account: String) = updateRow(id) { it.copy(transfer = true, transferAccount = account) }
+
     /** Ticks or unticks every row that can be imported (not already in the vault, not set to 0). */
     fun selectAll(selected: Boolean) = _state.update { st ->
         st.copy(rows = st.rows.map { if (it.selectable) it.copy(selected = selected) else it })
@@ -327,11 +345,16 @@ class StatementImportModel(
         st.copy(rows = st.rows.map { if (it.id == id) change(it) else it })
     }
 
-    fun import(categories: List<Category>, uncategorizedTitle: String, incomeTitle: String) {
+    fun import(
+        categories: List<Category>,
+        uncategorizedTitle: String,
+        incomeTitle: String,
+        transferTitle: (account: String, income: Boolean) -> String = { a, _ -> "Transfer $a" },
+    ) {
         val st = _state.value
         val account = st.account ?: return
         if (st.importing) return
-        val entries = ImportPlanner.entries(st.rows, categories, uncategorizedTitle, incomeTitle)
+        val entries = ImportPlanner.entries(st.rows, categories, uncategorizedTitle, incomeTitle, account, transferTitle)
         if (entries.isEmpty()) return
         _state.update { it.copy(importing = true) }
         scope.launch {
@@ -350,7 +373,7 @@ class StatementImportModel(
                     runCatching { repo.recordImport(account, record).imports }.getOrNull()
                 }
                 onImported(account)
-                val summary = ImportPlanner.summarize(st.rows, categories, uncategorizedTitle, incomeTitle)
+                val summary = ImportPlanner.summarize(st.rows, categories, uncategorizedTitle, incomeTitle, transferTitle)
                 val done = ImportPhase.Done(result, summary, review?.fileName, review?.result?.header?.period, review?.result?.header?.currency, account)
                 _state.update { it.copy(phase = done, importing = false, recent = recent ?: it.recent) }
             } catch (e: Throwable) {
@@ -380,7 +403,7 @@ class StatementImportModel(
     /** Corrects row [id]'s amount and re-totals the statement, so the user sees whether it now matches. */
     fun setAmount(id: Int, amount: Double) = _state.update { st ->
         val phase = st.phase as? ImportPhase.Review ?: return@update st
-        val rows = ImportPlanner.withAmount(st.rows, id, amount, existing)
+        val rows = ImportPlanner.withAmount(st.rows, id, amount, existing, transfers)
         st.copy(
             rows = rows,
             phase = phase.copy(result = phase.result.copy(reconciliation = ImportPlanner.reconcile(rows, phase.result.header))),

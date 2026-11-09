@@ -24,6 +24,9 @@ data class ReviewRow(
     val entryType: ExpenseType? = null,
     /** Already in the vault from an earlier import; never ticked by default. */
     val alreadyImported: Boolean,
+    /** The line is one side of a transfer; [transferAccount] is the account on the other side, once chosen. */
+    val transfer: Boolean = false,
+    val transferAccount: String? = null,
 ) {
     val isIncome: Boolean get() = tx.direction == Direction.CREDIT
 
@@ -119,8 +122,17 @@ object ImportPlanner {
      * The rows as first shown. Ticked only when the line is spending ([TxKind.preselected]), its
      * amount was found in the statement, and the vault doesn't already hold it.
      */
-    fun initialRows(transactions: List<StatementTransaction>, existing: Map<EntryKey, Int>): List<ReviewRow> {
-        val present = ImportDedup.alreadyPresent(transactions.map { EntryKey.of(entryOf(it, it.description)) }, existing)
+    fun initialRows(
+        transactions: List<StatementTransaction>,
+        existing: Map<EntryKey, Int>,
+        transfers: List<TransferEntry> = emptyList(),
+    ): List<ReviewRow> {
+        val present = ImportDedup.alreadyPresent(
+            transactions.map { EntryKey.of(entryOf(it, it.description)) },
+            transactions.map { it.direction == Direction.CREDIT },
+            existing,
+            transfers,
+        )
         return transactions.mapIndexed { i, t ->
             ReviewRow(
                 id = i,
@@ -137,8 +149,13 @@ object ImportPlanner {
      * Re-flags [rows] against another account's contents, keeping the user's edits. A row that turns
      * out to be there already is unticked; one that no longer is stays as the user left it.
      */
-    fun markExisting(rows: List<ReviewRow>, existing: Map<EntryKey, Int>): List<ReviewRow> {
-        val present = ImportDedup.alreadyPresent(rows.map { EntryKey.of(entryOf(it.tx, it.description)) }, existing)
+    fun markExisting(rows: List<ReviewRow>, existing: Map<EntryKey, Int>, transfers: List<TransferEntry> = emptyList()): List<ReviewRow> {
+        val present = ImportDedup.alreadyPresent(
+            rows.map { EntryKey.of(entryOf(it.tx, it.description)) },
+            rows.map { it.isIncome },
+            existing,
+            transfers,
+        )
         return rows.mapIndexed { i, row ->
             row.copy(alreadyImported = present[i], selected = row.selected && !present[i])
         }
@@ -154,8 +171,11 @@ object ImportPlanner {
         categories: List<Category>,
         uncategorizedTitle: String,
         incomeTitle: String,
-    ): List<ImportEntry> = rows.filter { it.selected && it.selectable }.map { row ->
-        val title = titleOf(row, categories, uncategorizedTitle, incomeTitle)
+        thisAccount: String = "",
+        transferTitle: (account: String, income: Boolean) -> String = { account, _ -> "Transfer $account" },
+    ): List<ImportEntry> = rows.filter { it.selected && it.selectable && !needsTransferAccount(it) }.map { row ->
+        val other = row.transferAccount?.takeIf { row.transfer }
+        val title = if (other != null) transferTitle(other, row.isIncome) else titleOf(row, categories, uncategorizedTitle, incomeTitle)
         ImportEntry(
             year = row.tx.date.year,
             month = Month.ALL.first { it.number == row.tx.date.month },
@@ -163,11 +183,14 @@ object ImportPlanner {
             category = row.category,
             income = row.isIncome,
             entry = entryOf(row.tx, row.description),
-            noteId = row.group?.noteId,
-            standalone = row.group?.standalone == true,
-            newType = row.group?.newType,
+            noteId = row.group?.noteId.takeIf { other == null },
+            standalone = row.group?.standalone == true && other == null,
+            newType = row.group?.newType.takeIf { other == null },
             newAmount = row.group?.newAmount,
             newMonths = row.group?.newMonths.orEmpty(),
+            counterAccount = other,
+            // On the other side the direction flips: what leaves here arrives there.
+            counterTitle = other?.let { transferTitle(thisAccount, !row.isIncome) },
         )
     }
 
@@ -188,14 +211,19 @@ object ImportPlanner {
         categories: List<Category>,
         uncategorizedTitle: String,
         incomeTitle: String,
+        transferTitle: (account: String, income: Boolean) -> String = { account, _ -> "Transfer $account" },
     ): ImportSummary {
-        val ticked = rows.filter { it.selected && it.selectable }
+        val ticked = rows.filter { it.selected && it.selectable && !needsTransferAccount(it) }
+        fun title(row: ReviewRow): String {
+            val other = row.transferAccount?.takeIf { row.transfer }
+            return if (other != null) transferTitle(other, row.isIncome) else titleOf(row, categories, uncategorizedTitle, incomeTitle)
+        }
         val destinations = ticked.groupBy { row ->
             val type = row.entryType ?: if (row.isIncome) ExpenseType.INCOME else ExpenseType.EVENTUAL
-            type to titleOf(row, categories, uncategorizedTitle, incomeTitle).lowercase()
+            type to title(row).lowercase()
         }.map { (key, group) ->
             ImportDestination(
-                title = titleOf(group.first(), categories, uncategorizedTitle, incomeTitle),
+                title = title(group.first()),
                 type = key.first,
                 months = group.map { r -> Month.ALL.first { it.number == r.tx.date.month } }.distinct().sortedBy { it.number },
                 lines = group.size,
@@ -216,7 +244,14 @@ object ImportPlanner {
 
     /** [row] filed under [type]; changing the kind drops the item, which belonged to the old one. */
     fun withType(row: ReviewRow, type: ExpenseType?): ReviewRow =
-        if (type == row.entryType) row else row.copy(entryType = type, group = null)
+        if (type == row.entryType && !row.transfer) row else row.copy(entryType = type, group = null, transfer = false, transferAccount = null)
+
+    /** [row] filed as a transfer: no kind, item or category any more, just the account on the other side. */
+    fun asTransfer(row: ReviewRow): ReviewRow =
+        if (row.transfer) row else row.copy(entryType = null, group = null, transfer = true, transferAccount = null)
+
+    /** Whether a ticked [row] still lacks the account of its transfer. */
+    fun needsTransferAccount(row: ReviewRow): Boolean = row.transfer && row.transferAccount == null
 
     /**
      * True when a total the statement prints disagrees with the lines read from it — the cue to go
@@ -230,13 +265,19 @@ object ImportPlanner {
      * totals. The amount is part of what makes a line a duplicate, so every row is re-checked
      * against the vault's [existing] entries.
      */
-    fun withAmount(rows: List<ReviewRow>, id: Int, amount: Double, existing: Map<EntryKey, Int>): List<ReviewRow> {
+    fun withAmount(
+        rows: List<ReviewRow>,
+        id: Int,
+        amount: Double,
+        existing: Map<EntryKey, Int>,
+        transfers: List<TransferEntry> = emptyList(),
+    ): List<ReviewRow> {
         val cents = kotlin.math.round(amount * 100) / 100
         if (cents < 0.0) return rows
         val changed = rows.map {
             if (it.id == id) it.copy(tx = it.tx.copy(amount = cents), selected = it.selected && cents > 0) else it
         }
-        return markExisting(changed, existing)
+        return markExisting(changed, existing, transfers)
     }
 
     /**

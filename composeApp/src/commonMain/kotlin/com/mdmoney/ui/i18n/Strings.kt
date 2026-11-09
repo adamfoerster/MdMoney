@@ -130,6 +130,13 @@ interface Strings {
     val cannotGroupNotice: String
     val remove: String
     val oneOffHint: String
+    val transferLabel: String
+    val transferHint: String
+    val transferToLabel: String
+    val transferFromLabel: String
+    val noOtherAccounts: String
+    fun transferOutTitle(account: String): String
+    fun transferInTitle(account: String): String
     val deleteEntry: String
     val fixedTag: String
     val variableTag: String

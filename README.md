@@ -138,6 +138,11 @@ A ledger of money **received** — what statement import writes for credits — 
 beside its title and counts as income instead of spending. Without `type:` a ledger is spending, as
 it always was.
 
+A **transfer** is two ledgers, one in each account: a spending group here and an income group there, each
+carrying `transfer: <the other account>` beside its title. Both are ordinary groups for every total and
+balance; the key only lets statement import recognise the second side of the same money — a line of the
+same day, amount and direction as a transfer row is already imported, whatever its note says.
+
 The Home screen shows the account **balance = opening balance + income received − everything paid**
 for the year (a checkbook: only settled months move the figure), and can set the opening balance in
 place.
@@ -196,9 +201,9 @@ The storage layer is the only platform-specific code, behind the `VaultStorage` 
   JBR feature; `compose.reload.jbr.autoProvisioningEnabled` in `gradle.properties` lets the plugin
   download JBR 21 on first run rather than failing on a machine that only has a plain JDK.
 
-Everything JVM-flavoured — desktop, Android and the tests — is built with **JDK 21**, declared as a
+Everything JVM-flavoured — desktop, Android and the tests — is built with **JDK 25** (Gradle 9.2), declared as a
 Gradle toolchain in `composeApp/build.gradle.kts`, so the JDK that happens to run Gradle doesn't
-change the output. `gradle/gradle-daemon-jvm.properties` asks for the same version for the daemon
+change the output. `gradle/gradle-daemon-jvm.properties` asks for the same JDK for the daemon
 itself; Gradle provisions it if the machine doesn't have one.
 
 ## Migrating a vault to the current format

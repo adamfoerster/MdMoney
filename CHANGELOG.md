@@ -12,6 +12,18 @@ heading when you cut a release.
 
 ## [Unreleased]
 
+## [0.20.0] — 2026-11-09
+
+### Added
+- **Transfers between accounts.** The add-one-off sheet gains a *Transfer* toggle: pick the destination account and the amount (its sign is ignored) and the money leaves the open account and arrives in the other. Each side is an ordinary ledger note — a spending group "Transfer to X" here, an income group "Transfer from Y" there — so no vault format changes and both balances move at once.
+- **Transfers in statement import.** A line's *kind* picker gains **Transfer**: choose the account on the other side and the line is filed there too — spent here, received there (or the reverse for a credit). The groups carry a new optional `transfer: <account>` key naming the other side; notes without it read exactly as before.
+- **The other side of a transfer is never imported twice.** A statement line that matches a transfer row the vault already holds — same day, same amount, same direction, whatever the note says — is shown as *already imported*, so importing B's statement after A's doesn't duplicate the money. Going the other way, a transfer line whose mirror the destination already has (same day, amount, opposite direction) is not written there again.
+
+## [0.19.2] � 2026-11-06
+
+### Changed
+- **The build runs on JDK 25.** Gradle moved from 8.13 to 9.2.1 and the Android Gradle Plugin from 8.9.2 to 8.13.2; the toolchain (and the Gradle daemon) now ask for JDK 25, and the desktop target emits JDK 25 bytecode. Android still targets Java 21 bytecode, API 35, minimum 26. Nothing about the app or the vault format changes.
+
 ## [0.19.1] — 2026-11-05
 
 ### Changed

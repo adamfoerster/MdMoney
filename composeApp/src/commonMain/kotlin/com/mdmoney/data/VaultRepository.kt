@@ -13,6 +13,7 @@ import com.mdmoney.importer.EntryKey
 import com.mdmoney.importer.ImportDedup
 import com.mdmoney.importer.ImportEntry
 import com.mdmoney.importer.ImportResult
+import com.mdmoney.importer.TransferEntry
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlin.math.round
@@ -82,6 +83,33 @@ class VaultRepository(
         return fileLock.withLock { writeOneOff(account, year, month, title, category, entry) }
     }
 
+    /**
+     * Moves money between two accounts: [amount] (its absolute value — the sign typed doesn't matter)
+     * leaves [from] as a row of the group [fromTitle] and arrives in [to] as a row of the income
+     * group [toTitle]. Both are ordinary ledger notes, so the balances, Home and Annual need nothing
+     * new, and Obsidian sees two plain tables. Returns the (source, destination) ledgers, or null —
+     * writing nothing — when the accounts are the same or [amount] is zero.
+     */
+    suspend fun addTransfer(
+        from: String,
+        to: String,
+        year: Int,
+        month: Month,
+        fromTitle: String,
+        toTitle: String,
+        date: String,
+        note: String,
+        amount: Double,
+    ): Pair<Ledger, Ledger>? {
+        val value = kotlin.math.abs(amount)
+        if (from == to || value == 0.0) return null
+        return fileLock.withLock {
+            val out = writeOneOff(from, year, month, fromTitle, null, LedgerEntry(date, note, value), transfer = to)
+            val incoming = writeOneOff(to, year, month, toTitle, null, LedgerEntry(date, note, value), income = true, transfer = from)
+            out to incoming
+        }
+    }
+
     private suspend fun writeOneOff(
         account: String,
         year: Int,
@@ -89,6 +117,8 @@ class VaultRepository(
         title: String,
         category: String?,
         entry: LedgerEntry,
+        income: Boolean = false,
+        transfer: String? = null,
     ): Ledger {
         val id = Ledger.idFor(year, month, title)
         val existingContent = runCatching { storage.read(account, "$id.md") }.getOrNull()
@@ -102,8 +132,10 @@ class VaultRepository(
                 year = year,
                 month = month,
                 entries = emptyList(),
+                income = income,
+                transfer = transfer,
             )
-            ).let { it.copy(entries = it.entries + entry, category = category ?: it.category) }
+            ).let { it.copy(entries = it.entries + entry, category = category ?: it.category, transfer = it.transfer ?: transfer) }
 
         storage.write(account, "$id.md", LedgerMapper.write(existingContent, ledger, links))
         cache.upsertAll(listOf(ledger.toExpense()))
@@ -165,14 +197,62 @@ class VaultRepository(
                         month = first.month,
                         entries = emptyList(),
                         income = first.income,
+                        transfer = first.counterAccount,
                     )
-                    ).let { it.copy(entries = it.entries + group.map { e -> e.entry }) }
+                    ).let { it.copy(entries = it.entries + group.map { e -> e.entry }, transfer = it.transfer ?: first.counterAccount) }
                 storage.write(account, "$id.md", LedgerMapper.write(existingContent, ledger, links))
                 cache.upsertAll(listOf(ledger.toExpense()))
+            }
+            // A transfer line also arrives on the other side — unless that side already holds it.
+            val known = accounts()
+            for ((counter, lines) in fresh.filter { it.counterAccount != null }.groupBy { it.counterAccount!! }) {
+                if (counter != account && counter in known) mirrorTransfers(counter, account, lines)
             }
             ImportResult(added = fresh.size, skipped = entries.size - fresh.size, notes = groups.size + plainNotes + alone.size)
         }
     }
+
+    /**
+     * Writes the other side of the transfer [lines] (made in [from]) into [to]: each line as the
+     * opposite direction, in a group marked as a transfer with [from]. A line [to] already holds —
+     * a row of the opposite direction on the same day for the same amount, written by an earlier
+     * import of its own statement — is not written again.
+     */
+    private suspend fun mirrorTransfers(to: String, from: String, lines: List<ImportEntry>) {
+        val months = lines.map { it.year to it.month }.toSet()
+        val held = ledgersIn(to, months).flatMap { l -> l.entries.map { TransferEntry(EntryKey.of(it), l.income) } }.toMutableList()
+        for (line in lines) {
+            val mirrorIncome = !line.income
+            val key = EntryKey.of(line.entry)
+            val i = held.indexOfFirst { it.sameMoney(key, mirrorIncome) }
+            if (i >= 0) {
+                held.removeAt(i)
+                continue
+            }
+            writeOneOff(
+                to, line.year, line.month, line.counterTitle ?: line.title, null, line.entry,
+                income = mirrorIncome, transfer = from,
+            )
+        }
+    }
+
+    /** Every ledger of [months] in [account]. */
+    private suspend fun ledgersIn(account: String, months: Set<Pair<Int, Month>>): List<Ledger> {
+        if (months.isEmpty()) return emptyList()
+        return runCatching { storage.listNotes(account) }.getOrDefault(emptyList()).mapNotNull { file ->
+            val content = runCatching { storage.read(account, file) }.getOrNull() ?: return@mapNotNull null
+            LedgerMapper.read(file.removeSuffix(".md"), account, content, months.first().first)
+                ?.takeIf { (it.year to it.month) in months }
+        }
+    }
+
+    /**
+     * The rows [account] holds in groups marked as one side of a transfer, for [months]: what the
+     * review matches a statement line against to see that the other account already wrote it.
+     */
+    suspend fun existingTransfers(account: String, months: Set<Pair<Int, Month>>): List<TransferEntry> =
+        ledgersIn(account, months).filter { it.transfer != null }
+            .flatMap { l -> l.entries.map { TransferEntry(EntryKey.of(it), l.income) } }
 
     /**
      * Makes the recurring notes the user asked for while reviewing ([ImportEntry.newType]) and points

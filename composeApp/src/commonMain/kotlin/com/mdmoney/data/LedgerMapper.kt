@@ -43,6 +43,7 @@ object LedgerMapper {
     private const val KEY_TOTAL = "total"
     private const val KEY_TYPE = "type"
     private const val TYPE_INCOME = "income"
+    private const val KEY_TRANSFER = "transfer"
 
     /** True when [content] parses as a ledger rather than a plain expense note. */
     fun isLedger(content: String): Boolean = isLedger(FrontmatterParser.parse(content))
@@ -73,6 +74,7 @@ object LedgerMapper {
             month = month,
             entries = readTable(note.body),
             income = note.scalar(KEY_TYPE) == TYPE_INCOME,
+            transfer = note.scalar(KEY_TRANSFER)?.takeIf { it.isNotBlank() },
         )
     }
 
@@ -98,6 +100,12 @@ object LedgerMapper {
             note.setScalar(KEY_TYPE, TYPE_INCOME, after = "title")
         } else if (note.scalar(KEY_TYPE) == TYPE_INCOME) {
             note.removeKey(KEY_TYPE)
+        }
+
+        if (ledger.transfer != null) {
+            note.setScalar(KEY_TRANSFER, ledger.transfer, after = "title")
+        } else if (note.hasKey(KEY_TRANSFER)) {
+            note.removeKey(KEY_TRANSFER)
         }
 
         val rebuilt = MarkdownNote(note.entries, replaceTable(note.body, renderTable(ledger.sorted())))

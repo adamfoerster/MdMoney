@@ -164,7 +164,7 @@ private fun ImportActionBar(importer: StatementImportModel, state: ImportUiState
             Modifier.fillMaxWidth().height(52.dp).clip(RoundedCornerShape(10.dp)).background(D.teal)
                 .alpha(if (enabled) 1f else 0.45f)
                 .clickable(enabled = enabled) {
-                    importer.import(app.categories, s.importedExpenseTitle, s.importedIncomeTitle)
+                    importer.import(app.categories, s.importedExpenseTitle, s.importedIncomeTitle) { acc, income -> if (income) s.transferInTitle(acc) else s.transferOutTitle(acc) }
                 },
             contentAlignment = Alignment.Center,
         ) {
@@ -470,7 +470,7 @@ private fun ReviewPhase(importer: StatementImportModel, state: ImportUiState, ph
     val mostUsed = mostUsedCategories(app.expenses)
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         state.rows.forEach { row ->
-            ReviewLine(row, state.groups, app.categories, mostUsed, importer)
+            ReviewLine(row, state.groups, app.categories, mostUsed, importer, app.accounts.filter { it != state.account })
         }
     }
 
@@ -537,6 +537,7 @@ private fun ReviewLine(
     categories: List<Category>,
     mostUsed: List<String>,
     importer: StatementImportModel,
+    otherAccounts: List<String>,
 ) {
     val s = LocalStrings.current
     val sep = LocalDecimalSeparator.current
@@ -603,17 +604,18 @@ private fun ReviewLine(
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             val type = row.entryType
-            PickerField(type?.let { s.typeName(it) } ?: s.groupFollowsCategory, todo = false, modifier = Modifier.weight(1f)) {
+            PickerField(if (row.transfer) s.transferLabel else type?.let { s.typeName(it) } ?: s.groupFollowsCategory, todo = false, modifier = Modifier.weight(1f)) {
                 picker = OpenPicker.Type
             }
             // "By category": the second field is the category; otherwise an item of the chosen kind.
             val itemLabel = when {
+                row.transfer -> row.transferAccount ?: if (row.isIncome) s.transferFromLabel else s.transferToLabel
                 type == null -> categoryTitle(row.category, categories) ?: s.uncategorized
                 row.group == null -> s.chooseItem
                 row.group.standalone -> s.groupNone
                 else -> row.group.title
             }
-            val todo = if (type == null) row.category == null else row.group == null
+            val todo = if (row.transfer) row.transferAccount == null else if (type == null) row.category == null else row.group == null
             PickerField(itemLabel, todo = todo, modifier = Modifier.weight(1f)) { picker = OpenPicker.Item }
         }
     }
@@ -630,9 +632,24 @@ private fun ReviewLine(
                     picker = OpenPicker.Item
                 },
                 onBack = { picker = OpenPicker.None },
+                transferSelected = row.transfer,
+                onTransfer = {
+                    importer.setTransfer(row.id)
+                    picker = OpenPicker.Item
+                },
             )
         }
-        OpenPicker.Item -> if (row.entryType == null) {
+        OpenPicker.Item -> if (row.transfer) {
+            PickerSheet(onDismiss = { picker = OpenPicker.None }) {
+                TransferAccountPage(
+                    title = if (row.isIncome) s.transferFromLabel else s.transferToLabel,
+                    accounts = otherAccounts,
+                    selected = row.transferAccount,
+                    onPick = { importer.setTransferAccount(row.id, it); picker = OpenPicker.None },
+                    onBack = { picker = OpenPicker.None },
+                )
+            }
+        } else if (row.entryType == null) {
             PickerSheet(onDismiss = { picker = OpenPicker.None }) {
                 CategoryPickerPage(
                     categories = categories,

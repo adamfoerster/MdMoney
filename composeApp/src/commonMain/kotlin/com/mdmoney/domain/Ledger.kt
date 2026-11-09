@@ -51,6 +51,11 @@ data class Ledger(
     val month: Month,
     val entries: List<LedgerEntry>,
     val income: Boolean = false,
+    /**
+     * Set on a group that is one side of a transfer: the account on the other side. On disk it is
+     * `transfer: <account>`; a note without it is an ordinary group, as before.
+     */
+    val transfer: String? = null,
 ) {
     val total: Double get() = entries.sumOf { it.amount }
 
