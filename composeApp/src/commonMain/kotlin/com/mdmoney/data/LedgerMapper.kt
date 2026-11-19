@@ -75,6 +75,7 @@ object LedgerMapper {
             entries = readTable(note.body),
             income = note.scalar(KEY_TYPE) == TYPE_INCOME,
             transfer = note.scalar(KEY_TRANSFER)?.takeIf { it.isNotBlank() },
+            patterns = MatchPatterns.read(note),
         )
     }
 

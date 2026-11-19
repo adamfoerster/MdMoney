@@ -56,6 +56,11 @@ data class Ledger(
      * `transfer: <account>`; a note without it is an ordinary group, as before.
      */
     val transfer: String? = null,
+    /**
+     * The note's `match:` list (see [Expense.patterns]). Saving a ledger leaves the key as the note
+     * has it; only statement import adds to it.
+     */
+    val patterns: List<MatchPattern> = emptyList(),
 ) {
     val total: Double get() = entries.sumOf { it.amount }
 
@@ -84,6 +89,7 @@ data class Ledger(
         amounts = Month.ALL.associateWith { if (it == month && entries.isNotEmpty()) total else null },
         paid = Month.ALL.associateWith { it == month },
         ledger = true,
+        patterns = patterns,
     )
 
     companion object {

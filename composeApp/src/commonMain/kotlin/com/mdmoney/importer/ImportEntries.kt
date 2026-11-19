@@ -35,6 +35,12 @@ data class ImportEntry(
      */
     val counterAccount: String? = null,
     val counterTitle: String? = null,
+    /**
+     * A pattern for the note the line lands in to add to its `match:` list, so a line like it is
+     * filed there on its own next time; null when there is nothing to learn (see
+     * [ImportPlanner.learnedPattern]).
+     */
+    val learn: String? = null,
 )
 
 /** What an import did: rows written, rows already in the vault (skipped), notes touched. */

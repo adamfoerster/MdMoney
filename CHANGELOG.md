@@ -12,6 +12,22 @@ heading when you cut a release.
 
 ## [Unreleased]
 
+## [0.23.0] — 2026-11-19
+
+### Added
+- **Statement import learns where lines go.** Any note — a monthly group or a plain bill — can carry a `match:` list of the statement descriptions that belong in it. On import, a line that one of them matches arrives already filed: under that group or bill, with its kind and category. The most specific pattern wins (the one with the most literal characters); on a tie, the group used most recently. A ledger group's patterns pool across its months, and a plain bill's count for its own year.
+- **Patterns are learned as you import.** Each imported line teaches the note it lands in a pattern for lines like it — the description up to the first part that changes between purchases (store number, category code, city and ZIP, a reference after `*`), then `*`: `Card Purchase Publix #1899 5411 Palm Bay…` teaches `Card Purchase Publix*`. A pattern never takes a line of the same import that you filed elsewhere; then the whole description is used. Transfers and lines filed as notes of their own teach nothing.
+- **Pattern format.** Each item is a glob over the whole description, ignoring case and runs of spaces: `*` is any run of characters, `?` one character (`*publix*` = contains). An item between slashes is a regular expression searched anywhere, for what a glob can't say: `/^pin purchase (wal-mart|walmart)/`. Edit them freely in Obsidian; the app only ever appends.
+- **`seedPatterns` task.** `./gradlew :composeApp:seedPatterns -Pvault=<path> -Paccount=<folder> [-Papply]` fills an account's `match:` lists from the lines its notes already hold, by the same rule, so the next import benefits at once. Previews unless `-Papply`.
+
+### Format
+- New optional `match:` key (a YAML list) in expense and ledger notes. Notes without it read exactly as before, and every existing key and the body are kept when it is added.
+
+## [0.22.1] � 2026-11-19
+
+### Fixed
+- **Home listed every month's income groups in every month.** An income ledger (the `Received` group statement import writes, one per month) showed up under each month of the year, empty everywhere but its own � so July looked like it held several duplicate `Received` lines. Income ledgers now follow the same rule as spending ones: they appear only in their own month. Plain income notes (a salary entered per month) still show every month. No vault format changes.
+
 ## [0.22.0] — 2026-11-19
 
 ### Added

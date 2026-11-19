@@ -50,6 +50,7 @@ object ExpenseMapper {
             tags = readTags(note),
             amounts = amounts,
             paid = paid,
+            patterns = MatchPatterns.read(note),
         )
     }
 

@@ -24,17 +24,18 @@ data class MonthLines(
  *   a recurring bill whose amount you only enter once it arrives.
  * - A **ledger** is the record of one month's purchases, so it shows only in that month. It has no
  *   value in any other month, and listing an empty `2026 Jun - Alimentação` under July would be
- *   claiming a purchase that never happened.
+ *   claiming a purchase that never happened. That holds for an **income** ledger too: statement
+ *   import keeps one `Received` group per month, and listing every month's under July looked like
+ *   a column of duplicates.
  */
 fun monthLines(expenses: List<Expense>, year: Int, month: Month): MonthLines {
-    val rows = expenses.filter { it.year == year }.sortedBy { it.title.lowercase() }
+    val rows = expenses.filter { it.year == year && (!it.ledger || it.amount(month) != null) }
+        .sortedBy { it.title.lowercase() }
     return MonthLines(
         income = rows.filter { it.isIncome },
         recurring = rows.filter {
             it.type == ExpenseType.RECURRING_FIXED || it.type == ExpenseType.RECURRING_VARIABLE
         },
-        eventual = rows.filter {
-            it.type == ExpenseType.EVENTUAL && (!it.ledger || it.amount(month) != null)
-        },
+        eventual = rows.filter { it.type == ExpenseType.EVENTUAL },
     )
 }

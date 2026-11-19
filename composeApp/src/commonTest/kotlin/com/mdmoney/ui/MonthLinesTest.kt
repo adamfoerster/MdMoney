@@ -60,6 +60,35 @@ class MonthLinesTest {
         assertEquals(listOf("Alimentação"), monthLines(listOf(june), 2026, Month.JUN).eventual.map { it.title })
     }
 
+    /**
+     * The reported bug: Regions keeps one `Received` income ledger per month, and July's Home listed
+     * all five of them — four empty rows looking like duplicates of the one that had money.
+     */
+    @Test
+    fun income_ledger_shows_only_in_its_own_month() {
+        fun received(month: Month, date: String, amount: Double) = Ledger(
+            id = "2026 ${month.name.lowercase().replaceFirstChar { it.uppercase() }} - Received",
+            account = "Regions",
+            title = "Received",
+            category = "Salário",
+            year = 2026,
+            month = month,
+            entries = listOf(LedgerEntry(date, "'deel, Payments", amount)),
+            income = true,
+        ).toExpense()
+        val rows = listOf(
+            received(Month.JUN, "20260624", 3058.6),
+            received(Month.JUL, "20260727", 3372.91),
+            received(Month.OCT, "20261009", 3412.24),
+            note("Salário fixo", ExpenseType.INCOME),
+        )
+
+        val july = monthLines(rows, 2026, Month.JUL).income
+
+        assertEquals(listOf("Received", "Salário fixo"), july.map { it.title }, "plain income stays every month")
+        assertEquals(3372.91, july.first().amount(Month.JUL))
+    }
+
     /** A group with no purchases in it is not a spend: it stays out of its own month too. */
     @Test
     fun ledger_without_entries_is_hidden_even_in_its_own_month() {

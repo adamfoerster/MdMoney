@@ -5,6 +5,7 @@ import com.mdmoney.domain.Currency
 import com.mdmoney.domain.Expense
 import com.mdmoney.domain.ExpenseType
 import com.mdmoney.domain.LedgerEntry
+import com.mdmoney.domain.MatchPattern
 import com.mdmoney.domain.Month
 import com.mdmoney.domain.categoryTitle
 
@@ -27,6 +28,11 @@ data class ReviewRow(
     /** The line is one side of a transfer; [transferAccount] is the account on the other side, once chosen. */
     val transfer: Boolean = false,
     val transferAccount: String? = null,
+    /**
+     * The `match:` pattern that filed the line (its item, kind and category), until the user changes
+     * any of those by hand; null for a line no pattern claimed.
+     */
+    val matched: MatchPattern? = null,
 ) {
     val isIncome: Boolean get() = tx.direction == Direction.CREDIT
 
@@ -81,8 +87,67 @@ data class ImportSummary(val credits: Double, val debits: Double, val destinatio
     val lines: Int get() = destinations.sumOf { it.lines }
 }
 
+/**
+ * Where a note's `match:` list says a statement line belongs: the item to file it under, the kind
+ * and category that come with it, and the pattern that recognised it.
+ */
+data class PatternMatch(
+    val group: GroupChoice,
+    val type: ExpenseType,
+    val category: String?,
+    val pattern: MatchPattern,
+)
+
 /** Everything an account holds that a statement line could be filed under. */
 data class AccountGroups(val notes: List<Expense> = emptyList()) {
+
+    /**
+     * The item whose `match:` list takes [description], for a line of [year] that is money in when
+     * [income]. Only notes of the same direction count, and a plain note only for its own year — a
+     * ledger group is the same group whatever month it is in, so all its notes' patterns pool.
+     *
+     * When several items match, the most specific pattern wins (see [MatchPattern.specificity]);
+     * on a tie the most recent item does, as it reflects how lines are filed now. Null when no note
+     * claims the line.
+     */
+    fun match(description: String, income: Boolean, year: Int): PatternMatch? = notes
+        .asSequence()
+        .filter { it.isIncome == income && (it.ledger || it.year == year) }
+        .mapNotNull { note ->
+            val best = note.patterns.filter { it.matches(description) }.maxByOrNull { it.specificity } ?: return@mapNotNull null
+            note to best
+        }
+        .sortedWith(
+            compareByDescending<Pair<Expense, MatchPattern>> { it.second.specificity }
+                .thenByDescending { recency(it.first) }
+                .thenBy { it.first.title.lowercase() },
+        )
+        .firstOrNull()
+        ?.let { (note, pattern) ->
+            PatternMatch(
+                group = if (note.ledger) GroupChoice(note.title) else GroupChoice(note.title, note.id),
+                type = note.type,
+                category = note.category,
+                pattern = pattern,
+            )
+        }
+
+    /**
+     * Every pattern of the item [group] (of the direction [income]): a plain note's own list, or the
+     * pooled lists of a ledger group's notes. Empty for an item that doesn't exist yet.
+     */
+    fun patternsOf(group: GroupChoice?, title: String, income: Boolean): List<MatchPattern> {
+        val noteId = group?.noteId
+        return if (noteId != null) notes.firstOrNull { it.id == noteId }?.patterns.orEmpty()
+        else notes.filter { it.ledger && it.isIncome == income && it.title.equals(title, ignoreCase = true) }.flatMap { it.patterns }
+    }
+
+    /** A ledger counts as its own month; a plain note, the plan for its year, as after all of them. */
+    private fun recency(note: Expense): Int {
+        val month = if (note.ledger) Month.ALL.firstOrNull { note.isPaid(it) }?.number ?: 0 else 13
+        return note.year * 100 + month
+    }
+
     /**
      * The choices for [row]: money in and money out each see their own kind. A plain note only
      * counts for the year it belongs to — the year of the line — and hides a ledger group that
@@ -126,6 +191,7 @@ object ImportPlanner {
         transactions: List<StatementTransaction>,
         existing: Map<EntryKey, Int>,
         transfers: List<TransferEntry> = emptyList(),
+        groups: AccountGroups = AccountGroups(),
     ): List<ReviewRow> {
         val present = ImportDedup.alreadyPresent(
             transactions.map { EntryKey.of(entryOf(it, it.description)) },
@@ -133,7 +199,7 @@ object ImportPlanner {
             existing,
             transfers,
         )
-        return transactions.mapIndexed { i, t ->
+        val rows = transactions.mapIndexed { i, t ->
             ReviewRow(
                 id = i,
                 tx = t,
@@ -143,7 +209,58 @@ object ImportPlanner {
                 alreadyImported = present[i],
             )
         }
+        return applyPatterns(rows, groups)
     }
+
+    /**
+     * Files every row the user hasn't filed yet (no item, no kind, not a transfer) where a note's
+     * `match:` list says it belongs, with that note's kind and category. A row no note claims keeps
+     * the category it was read with.
+     */
+    fun applyPatterns(rows: List<ReviewRow>, groups: AccountGroups): List<ReviewRow> = rows.map { row ->
+        if (row.group != null || row.entryType != null || row.transfer) return@map row
+        val m = groups.match(row.description, row.isIncome, row.tx.date.year) ?: return@map row
+        row.copy(group = m.group, entryType = m.type, category = m.category ?: row.category, matched = m.pattern)
+    }
+
+    /**
+     * [rows] re-filed for another account's [groups]: what a pattern decided is undone and decided
+     * again from that account's notes; what the user chose keeps its kind and category, but not its
+     * item, which belonged to the previous account.
+     */
+    fun refile(rows: List<ReviewRow>, groups: AccountGroups): List<ReviewRow> = applyPatterns(
+        rows.map {
+            if (it.matched != null) it.copy(group = null, entryType = null, category = it.tx.category, matched = null)
+            else it.copy(group = null)
+        },
+        groups,
+    )
+
+    /**
+     * The pattern the item [row] is filed under should gain, so the next statement files a line like
+     * it there on its own — or null when there is nothing to learn (a transfer, a line filed as a note
+     * of its own).
+     *
+     * When the item already has a pattern taking the line, that pattern is the answer, so the note
+     * the line lands in (a ledger's new month, say) carries it too. Otherwise it is
+     * [MatchPattern.learnFrom]; but a pattern must not take a line of this same import that the user
+     * filed somewhere else, so then the whole description (plus `*`) is used, and nothing at all if
+     * even that would.
+     */
+    fun learnedPattern(row: ReviewRow, title: String, ticked: List<Pair<ReviewRow, String>>, groups: AccountGroups): String? {
+        if (row.transfer || row.group?.standalone == true) return null
+        groups.patternsOf(row.group, title, row.isIncome).firstOrNull { it.matches(row.description) }?.let { return it.text }
+        val here = destination(row, title)
+        val elsewhere = ticked.filter { (other, otherTitle) -> other.id != row.id && destination(other, otherTitle) != here }
+            .map { it.first.description }
+        return listOfNotNull(MatchPattern.learnFrom(row.description), row.description.trim().takeIf { it.isNotEmpty() }?.let { "$it*" })
+            .firstOrNull { text -> val p = MatchPattern.of(text); p != null && elsewhere.none { p.matches(it) } }
+    }
+
+    /** Which item a row lands in: a plain note by id, anything else by direction and title. */
+    private fun destination(row: ReviewRow, title: String): String =
+        if (row.transfer) "transfer:${row.transferAccount}:${row.isIncome}"
+        else row.group?.noteId?.let { "note:$it" } ?: "group:${row.isIncome}:${title.lowercase()}"
 
     /**
      * Re-flags [rows] against another account's contents, keeping the user's edits. A row that turns
@@ -173,10 +290,24 @@ object ImportPlanner {
         incomeTitle: String,
         thisAccount: String = "",
         transferTitle: (account: String, income: Boolean) -> String = { account, _ -> "Transfer $account" },
-    ): List<ImportEntry> = rows.filter { it.selected && it.selectable && !needsTransferAccount(it) }.map { row ->
+        groups: AccountGroups = AccountGroups(),
+    ): List<ImportEntry> {
+        val ticked = rows.filter { it.selected && it.selectable && !needsTransferAccount(it) }.map { row ->
+            val other = row.transferAccount?.takeIf { row.transfer }
+            row to (if (other != null) transferTitle(other, row.isIncome) else titleOf(row, categories, uncategorizedTitle, incomeTitle))
+        }
+        return ticked.map { (row, title) -> entryFor(row, title, thisAccount, transferTitle, learnedPattern(row, title, ticked, groups)) }
+    }
+
+    private fun entryFor(
+        row: ReviewRow,
+        title: String,
+        thisAccount: String,
+        transferTitle: (account: String, income: Boolean) -> String,
+        learn: String?,
+    ): ImportEntry {
         val other = row.transferAccount?.takeIf { row.transfer }
-        val title = if (other != null) transferTitle(other, row.isIncome) else titleOf(row, categories, uncategorizedTitle, incomeTitle)
-        ImportEntry(
+        return ImportEntry(
             year = row.tx.date.year,
             month = Month.ALL.first { it.number == row.tx.date.month },
             title = title,
@@ -191,6 +322,7 @@ object ImportPlanner {
             counterAccount = other,
             // On the other side the direction flips: what leaves here arrives there.
             counterTitle = other?.let { transferTitle(thisAccount, !row.isIncome) },
+            learn = learn,
         )
     }
 

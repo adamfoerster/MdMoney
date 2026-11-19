@@ -145,7 +145,8 @@ class VaultRepository(
     /**
      * Writes reviewed statement lines into their ledger notes — one read-modify-write per note, not
      * per line — skipping every line the vault already holds (see [ImportDedup]), so importing the
-     * same statement twice adds nothing the second time.
+     * same statement twice adds nothing the second time. Each note also gains the patterns its new
+     * lines teach ([ImportEntry.learn]) in its `match:` list, in the same write.
      */
     suspend fun importEntries(account: String, entries: List<ImportEntry>): ImportResult {
         ensureCategories(entries.mapNotNull { it.category })
@@ -168,9 +169,9 @@ class VaultRepository(
                 }
                 val expense = ExpenseMapper.read(noteId!!, account, content, group.first().year)
                 val updated = expense.withAddedLines(group)
-                val text = LedgerMapper.withAppendedRows(
-                    ExpenseMapper.write(content, expense, updated, links),
-                    group.map { it.entry },
+                val text = MatchPatterns.withAdded(
+                    LedgerMapper.withAppendedRows(ExpenseMapper.write(content, expense, updated, links), group.map { it.entry }),
+                    group.mapNotNull { it.learn },
                 )
                 storage.write(account, "$noteId.md", text)
                 cache.upsertAll(listOf(updated))
@@ -200,7 +201,9 @@ class VaultRepository(
                         transfer = first.counterAccount,
                     )
                     ).let { it.copy(entries = it.entries + group.map { e -> e.entry }, transfer = it.transfer ?: first.counterAccount) }
-                storage.write(account, "$id.md", LedgerMapper.write(existingContent, ledger, links))
+                // The group learns the lines it took, so the next statement files them here on its own.
+                val text = MatchPatterns.withAdded(LedgerMapper.write(existingContent, ledger, links), group.mapNotNull { it.learn })
+                storage.write(account, "$id.md", text)
                 cache.upsertAll(listOf(ledger.toExpense()))
             }
             // A transfer line also arrives on the other side — unless that side already holds it.

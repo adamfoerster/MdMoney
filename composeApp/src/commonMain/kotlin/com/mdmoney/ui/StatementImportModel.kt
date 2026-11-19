@@ -236,10 +236,13 @@ class StatementImportModel(
         val recent = meta?.imports.orEmpty()
         // Read from the vault, not the open screen's list: the account being imported into needn't be
         // the open one, and that list only holds one year.
-        val groups = runCatching { AccountGroups(repo.loadExpenses(account, fallbackYear())) }
-            .getOrDefault(AccountGroups())
+        val groups = freshGroups(account)
         _state.update { if (it.account == account) it.copy(accountCurrency = currency, groups = groups, recent = recent) else it }
     }
+
+    /** The groups of [account] as the files hold them now, `match:` lists included. */
+    private suspend fun freshGroups(account: String): AccountGroups =
+        runCatching { AccountGroups(repo.loadExpenses(account, fallbackYear())) }.getOrDefault(AccountGroups())
 
     fun cancel() {
         readJob?.cancel()
@@ -247,9 +250,11 @@ class StatementImportModel(
 
     /** Changes where the lines go, re-checking which of them that account already holds. */
     fun setAccount(account: String) = scope.launch {
-        // Groups belong to an account, so a pick made against the previous one no longer applies.
+        // Groups belong to an account, so a pick made against the previous one no longer applies;
+        // the lines a pattern filed are filed again by this account's patterns.
         _state.update { st -> st.copy(account = account, rows = st.rows.map { it.copy(group = null) }) }
         loadCurrency(account)
+        _state.update { st -> if (st.account == account) st.copy(rows = ImportPlanner.refile(st.rows, st.groups)) else st }
         val rows = _state.value.rows
         if (rows.isEmpty()) return@launch
         val months = rows.map { it.tx.date.year to Month.ALL.first { m -> m.number == it.tx.date.month } }.toSet()
@@ -300,13 +305,16 @@ class StatementImportModel(
                 val months = result.transactions.map { it.date.year to Month.ALL.first { m -> m.number == it.date.month } }.toSet()
                 val existing = account?.let { runCatching { repo.existingEntryCounts(it, months) }.getOrNull() }.orEmpty()
                 val transfers = account?.let { runCatching { repo.existingTransfers(it, months) }.getOrNull() }.orEmpty()
+                // Read again rather than reused: an import made since the screen opened taught new patterns.
+                val groups = account?.let { freshGroups(it) } ?: AccountGroups()
                 this@StatementImportModel.pdf = pdf
                 this@StatementImportModel.existing = existing
                 this@StatementImportModel.transfers = transfers
                 _state.update {
                     it.copy(
                         phase = ImportPhase.Review(pdf.name, result, pageCount = pages.size),
-                        rows = ImportPlanner.initialRows(result.transactions, existing, transfers),
+                        rows = ImportPlanner.initialRows(result.transactions, existing, transfers, groups),
+                        groups = if (it.account == account) groups else it.groups,
                     )
                 }
             } catch (e: CancellationException) {
@@ -324,17 +332,19 @@ class StatementImportModel(
 
     fun setDescription(id: Int, text: String) = updateRow(id) { it.copy(description = text) }
 
-    fun setCategory(id: Int, slug: String?) = updateRow(id) { it.copy(category = slug) }
+    // Filing a line by hand takes it over from the pattern that filed it (see ReviewRow.matched).
 
-    fun setGroup(id: Int, group: GroupChoice?) = updateRow(id) { it.copy(group = group) }
+    fun setCategory(id: Int, slug: String?) = updateRow(id) { it.copy(category = slug, matched = null) }
+
+    fun setGroup(id: Int, group: GroupChoice?) = updateRow(id) { it.copy(group = group, matched = null) }
 
     /** Files the line under a kind of item (null: follow the category); the item is chosen next. */
-    fun setType(id: Int, type: ExpenseType?) = updateRow(id) { ImportPlanner.withType(it, type) }
+    fun setType(id: Int, type: ExpenseType?) = updateRow(id) { ImportPlanner.withType(it, type).copy(matched = null) }
 
     /** Files the line as a transfer (the account on the other side is chosen next). */
-    fun setTransfer(id: Int) = updateRow(id) { ImportPlanner.asTransfer(it) }
+    fun setTransfer(id: Int) = updateRow(id) { ImportPlanner.asTransfer(it).copy(matched = null) }
 
-    fun setTransferAccount(id: Int, account: String) = updateRow(id) { it.copy(transfer = true, transferAccount = account) }
+    fun setTransferAccount(id: Int, account: String) = updateRow(id) { it.copy(transfer = true, transferAccount = account, matched = null) }
 
     /** Ticks or unticks every row that can be imported (not already in the vault, not set to 0). */
     fun selectAll(selected: Boolean) = _state.update { st ->
@@ -354,7 +364,7 @@ class StatementImportModel(
         val st = _state.value
         val account = st.account ?: return
         if (st.importing) return
-        val entries = ImportPlanner.entries(st.rows, categories, uncategorizedTitle, incomeTitle, account, transferTitle)
+        val entries = ImportPlanner.entries(st.rows, categories, uncategorizedTitle, incomeTitle, account, transferTitle, st.groups)
         if (entries.isEmpty()) return
         _state.update { it.copy(importing = true) }
         scope.launch {

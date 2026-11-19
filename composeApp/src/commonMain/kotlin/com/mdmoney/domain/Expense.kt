@@ -26,6 +26,12 @@ data class Expense(
      * than the cell/expense editor — writing it back as a plain note would destroy the table.
      */
     val ledger: Boolean = false,
+    /**
+     * The note's `match:` list: descriptions of statement lines that belong here, which statement
+     * import uses to file a line on its own. Read from the file only — the cache doesn't keep it, as
+     * nothing but the import (which reads the files) needs it.
+     */
+    val patterns: List<MatchPattern> = emptyList(),
 ) {
     fun amount(month: Month): Double? = amounts[month]
 

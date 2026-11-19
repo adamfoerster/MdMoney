@@ -288,6 +288,26 @@ val migrateVault by tasks.registering(JavaExec::class) {
 }
 
 /**
+ * Fills one account's `match:` lists from the statement lines its notes already hold (see
+ * `SeedPatterns`). Previews by default:
+ *
+ *     ./gradlew :composeApp:seedPatterns -Pvault=/path/to/vault -Paccount=Regions [-Papply]
+ */
+val seedPatterns by tasks.registering(JavaExec::class) {
+    group = "mdmoney"
+    description = "Fills an account's match: lists from the lines its notes hold. -Pvault=<path> -Paccount=<folder> [-Papply]"
+    val jvmMain = kotlin.jvm().compilations.getByName("main")
+    classpath = files(jvmMain.output.allOutputs, jvmMain.runtimeDependencyFiles)
+    dependsOn(jvmMain.compileTaskProvider)
+    mainClass.set("com.mdmoney.tools.SeedPatternsKt")
+    doFirst {
+        val vault = providers.gradleProperty("vault").orNull ?: error("Which vault? Pass -Pvault=/path/to/vault")
+        val account = providers.gradleProperty("account").orNull ?: error("Which account? Pass -Paccount=<folder>")
+        args = listOfNotNull(vault, account, "--apply".takeIf { project.hasProperty("apply") })
+    }
+}
+
+/**
  * Measures statement extraction on a folder of real PDFs (see `EvalStatements`). Nothing is written.
  *
  *     ./gradlew :composeApp:evalStatements -Pdir=/path/to/pdfs [-Pmodel=/path/to/model.gguf] [-Ptext]

@@ -143,6 +143,37 @@ carrying `transfer: <the other account>` beside its title. Both are ordinary gro
 balance; the key only lets statement import recognise the second side of the same money — a line of the
 same day, amount and direction as a transfer row is already imported, whatever its note says.
 
+### Statement lines that file themselves: `match:`
+
+Any note — a ledger group or a plain bill — can list the statement descriptions that belong in it:
+
+```yaml
+title: Groceries
+category: "[[groceries|Groceries]]"
+match:
+  - "Card Purchase Publix*"
+  - "PIN Purchase Wal-Mart*"
+  - "/^pin purchase (winn-dixie|aldi)/"
+```
+
+Each item is a **glob** over the whole description, ignoring case and runs of spaces: `*` is any run of
+characters, `?` one character. `Card Purchase Publix*` takes lines that start that way; `*publix*`
+takes any line that mentions it. An item **between slashes** is a regular expression, searched
+anywhere in the description. Since `*` and `?` also match themselves, a description pasted as-is
+always matches its own line.
+
+On import, a line one of these matches arrives already filed under that note, with its kind and
+category. The most specific pattern (most literal characters) wins; on a tie, the group used most
+recently. A ledger group's patterns pool across its months; a plain bill's only count for its year.
+
+Every imported line also **teaches** the note it lands in: the description up to the first part that
+changes between purchases — a number, a code like `F319` or `It3qqlkc4`, a reference after `*` — then
+`*`. `Card Purchase Publix #1899 5411 Palm Bay FL 32907 3914` teaches `Card Purchase Publix*`. A
+pattern never takes a line of the same import filed elsewhere (the whole description is used then),
+and nothing is learned from transfers or lines filed as notes of their own. The app only appends to
+the list, so hand edits stay; `./gradlew :composeApp:seedPatterns -Pvault=… -Paccount=… [-Papply]`
+fills the lists of an existing account from the lines its notes already hold.
+
 The Home screen shows the account **balance = opening balance + income received − everything paid**
 for the year (a checkbook: only settled months move the figure), and can set the opening balance in
 place.
