@@ -62,7 +62,11 @@ import com.mdmoney.domain.Month
 import com.mdmoney.domain.categoryTitle
 import com.mdmoney.ui.AppModel
 import com.mdmoney.ui.UiState
+import com.mdmoney.ui.Period
+import com.mdmoney.ui.PeriodLine
 import com.mdmoney.ui.monthBalance
+import com.mdmoney.ui.periodBalance
+import com.mdmoney.ui.periodLines
 import com.mdmoney.ui.monthLines
 import com.mdmoney.ui.components.CurrencyPicker
 import com.mdmoney.ui.components.Eyebrow
@@ -83,9 +87,12 @@ fun HomeScreen(model: AppModel, state: UiState) {
     val cur = LocalCurrencySymbol.current
     var editBalance by remember { mutableStateOf(false) }
     var editAccount by remember { mutableStateOf(false) }
+    var pickPeriod by remember { mutableStateOf(false) }
 
     val month = state.homeMonth
     val lines = monthLines(state.expenses, state.year, month)
+    val period = state.period
+    val periodLines = period?.let { periodLines(state.expenses, state.periodLedgers, it) }
 
     Surface(Modifier.fillMaxSize(), color = D.bg) {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
@@ -144,7 +151,37 @@ fun HomeScreen(model: AppModel, state: UiState) {
                     }
                 }
 
-                MonthStepper(month, s.month(month), state.year) { model.setHomeMonth(it) }
+                MonthStepper(
+                    month = month,
+                    label = if (period == null) "${s.month(month)} ${state.year}" else periodLabel(period, s),
+                    inPeriod = period != null,
+                    onSelect = { model.setHomeMonth(it) },
+                    onLabelClick = { pickPeriod = true },
+                )
+
+                if (period != null && periodLines != null) {
+                    state.periodInitial?.let { initial ->
+                        val pb = periodBalance(state.expenses, state.periodLedgers, period, initial)
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            MonthBalanceTile(s.monthStartBalance, pb.start, Modifier.weight(1f))
+                            MonthBalanceTile(s.monthEndBalance, pb.end, Modifier.weight(1f))
+                        }
+                    }
+                    if (periodLines.isEmpty) {
+                        Text(
+                            s.nothingThisMonth,
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = D.soft,
+                            modifier = Modifier.padding(vertical = 12.dp),
+                        )
+                    } else {
+                        PeriodSection(s.incomeSection, periodLines.income, D.teal, state.categories)
+                        PeriodSection(s.recurringSection, periodLines.recurring, D.ink, state.categories)
+                        PeriodSection(s.eventualSection, periodLines.eventual, D.ink, state.categories)
+                    }
+                    Spacer(Modifier.height(12.dp))
+                    return@Column
+                }
 
                 state.initialBalance?.let { initial ->
                     val mb = monthBalance(state.expenses, state.year, month, initial)
@@ -188,6 +225,17 @@ fun HomeScreen(model: AppModel, state: UiState) {
         )
     }
 
+    if (pickPeriod) {
+        PeriodDialog(
+            current = period,
+            year = state.year,
+            month = month,
+            onDismiss = { pickPeriod = false },
+            onApply = { model.setPeriod(it); pickPeriod = false },
+            onBackToMonth = { model.setPeriod(null); pickPeriod = false },
+        )
+    }
+
     if (editAccount) {
         EditAccountDialog(
             title = state.accountTitle ?: state.selectedAccount.orEmpty(),
@@ -195,6 +243,61 @@ fun HomeScreen(model: AppModel, state: UiState) {
             onDismiss = { editAccount = false },
             onSave = { title, currency -> model.editAccount(title, currency); editAccount = false },
         )
+    }
+}
+
+/** "1 Jan 2026 – 31 Mar 2026" for a range; the month for one month; a count for several. */
+private fun periodLabel(period: Period, s: com.mdmoney.ui.i18n.Strings): String = when (period) {
+    is Period.Months -> {
+        val first = period.months.min()
+        if (period.months.size == 1) "${s.month(Month.fromNumber(first.month)!!)} ${first.year}"
+        else s.monthsOfTwelve(period.months.size)
+    }
+    is Period.Range -> {
+        fun d(x: com.mdmoney.importer.SimpleDate) = "${x.day} ${s.monthShort(Month.fromNumber(x.month)!!)} ${x.year}"
+        "${d(period.start)} – ${d(period.end)}"
+    }
+}
+
+/** A read-only block of the period view: what each title came to across the period. */
+@Composable
+private fun PeriodSection(label: String, rows: List<PeriodLine>, accent: Color, categories: List<Category>) {
+    if (rows.isEmpty()) return
+    val sep = LocalDecimalSeparator.current
+    val cur = LocalCurrencySymbol.current
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 2.dp), verticalAlignment = Alignment.Top) {
+            Text(label.uppercase(), style = MaterialTheme.typography.labelMedium.copy(fontSize = 12.sp), color = D.soft, modifier = Modifier.weight(1f))
+            Text(
+                formatMoney(rows.sumOf { it.amount }, sep, cur),
+                style = MaterialTheme.typography.bodyMedium.copy(fontFeatureSettings = "tnum"),
+                fontWeight = FontWeight.Medium,
+                color = accent,
+            )
+        }
+        Column(Modifier.fillMaxWidth().importCard()) {
+            rows.forEachIndexed { i, row ->
+                if (i > 0) Box(Modifier.fillMaxWidth().height(1.dp).background(D.rule))
+                Row(
+                    Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(horizontal = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(row.title, style = MaterialTheme.typography.bodyMedium.copy(fontSize = 15.sp), fontWeight = FontWeight.Medium, color = D.ink, maxLines = 1)
+                        categoryTitle(row.category, categories)?.let {
+                            Text(it, style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp), color = D.soft)
+                        }
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    Text(
+                        formatMoney(row.amount, sep, cur),
+                        style = TextStyle(fontSize = 15.sp, fontFeatureSettings = "tnum", textAlign = TextAlign.End),
+                        fontWeight = FontWeight.Medium,
+                        color = accent,
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -275,7 +378,13 @@ private fun Section(
 }
 
 @Composable
-private fun MonthStepper(month: Month, label: String, year: Int, onSelect: (Month) -> Unit) {
+private fun MonthStepper(
+    month: Month,
+    label: String,
+    inPeriod: Boolean,
+    onSelect: (Month) -> Unit,
+    onLabelClick: () -> Unit,
+) {
     fun shift(delta: Int) {
         val n = ((month.number - 1 + delta + 12) % 12) + 1
         onSelect(Month.ALL.first { it.number == n })
@@ -285,12 +394,20 @@ private fun MonthStepper(month: Month, label: String, year: Int, onSelect: (Mont
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
-        Box(Modifier.size(44.dp).clickable { shift(-1) }, contentAlignment = Alignment.Center) {
-            Text("‹", style = MaterialTheme.typography.titleLarge, color = D.onDark)
+        // Over a period the arrows have no month to step from: the left one returns to the single
+        // month, the right one is left blank to keep the label centred.
+        Box(Modifier.size(44.dp).clickable { if (inPeriod) onSelect(month) else shift(-1) }, contentAlignment = Alignment.Center) {
+            Text(if (inPeriod) "✕" else "‹", style = MaterialTheme.typography.titleLarge, color = D.onDark)
         }
-        Text("$label $year".uppercase(), style = MaterialTheme.typography.labelLarge.copy(fontSize = 14.sp), color = D.onDark)
-        Box(Modifier.size(44.dp).clickable { shift(1) }, contentAlignment = Alignment.Center) {
-            Text("›", style = MaterialTheme.typography.titleLarge, color = D.onDark)
+        Text(
+            label.uppercase(),
+            style = MaterialTheme.typography.labelLarge.copy(fontSize = 14.sp),
+            color = D.onDark,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.weight(1f).clickable(onClick = onLabelClick).padding(vertical = 12.dp),
+        )
+        Box(Modifier.size(44.dp).then(if (inPeriod) Modifier else Modifier.clickable { shift(1) }), contentAlignment = Alignment.Center) {
+            if (!inPeriod) Text("›", style = MaterialTheme.typography.titleLarge, color = D.onDark)
         }
     }
 }

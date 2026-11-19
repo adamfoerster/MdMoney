@@ -85,6 +85,14 @@ interface Strings {
     val initialBalance: String
     val monthStartBalance: String
     val monthEndBalance: String
+    val periodMonths: String
+    val periodRange: String
+    val periodApply: String
+    val periodBackToMonth: String
+    val pickFirstDay: String
+    val pickLastDay: String
+    val weekdayInitials: List<String>
+    fun monthsOfTwelve(n: Int): String
     val setInitialBalance: String
     val createAccount: String
     val accountNameHint: String

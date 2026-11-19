@@ -88,6 +88,12 @@ data class UiState(
     val availableYears: List<Int> = emptyList(),
     val expenses: List<Expense> = emptyList(),
     val homeMonth: Month,
+    /** Home's picked months or day range; null is the usual single [homeMonth]. */
+    val period: Period? = null,
+    /** The ledgers whose purchases a day range splits, by note id — read when the range is set. */
+    val periodLedgers: Map<String, Ledger> = emptyMap(),
+    /** Opening balance of the year the [period] starts in; null when that year has none. */
+    val periodInitial: Double? = null,
     val initialBalance: Double? = null,
     val balance: Double? = null,
     val loading: Boolean = false,
@@ -188,7 +194,10 @@ class AppModel(
     fun switchAccount() {
         val leaving = _state.value.selectedAccount
         _state.update {
-            it.copy(screen = Screen.Accounts, selectedAccount = null, editor = null, openCategory = null)
+            it.copy(
+                screen = Screen.Accounts, selectedAccount = null, editor = null, openCategory = null,
+                period = null, periodLedgers = emptyMap(), periodInitial = null,
+            )
         }
         // Whatever was edited inside the account has to show on the list it returns to.
         leaving?.let { scope.launch { refreshSummary(it) } }
@@ -337,7 +346,31 @@ class AppModel(
         _state.update { it.copy(hideAmounts = hidden) }
     }
 
-    fun setHomeMonth(month: Month) = _state.update { it.copy(homeMonth = month) }
+    fun setHomeMonth(month: Month) =
+        _state.update { it.copy(homeMonth = month, period = null, periodLedgers = emptyMap(), periodInitial = null) }
+
+    /**
+     * Shows Home over [period] — picked months or a day range — or back over a single month when null.
+     * A day range can cut a ledger's month in two, so those ledgers' purchases are read first; a
+     * months list takes whole months and needs none.
+     */
+    fun setPeriod(period: Period?) = scope.launch {
+        val st = _state.value
+        val account = st.selectedAccount
+        if (period == null || account == null) {
+            _state.update { it.copy(period = null, periodLedgers = emptyMap(), periodInitial = null) }
+            return@launch
+        }
+        val initial = meta?.initialBalance(period.firstDay / 10_000)
+        val ledgers = if (period !is Period.Range) emptyMap() else {
+            val edges = setOf(period.firstDay / 100, period.lastDay / 100)
+            st.expenses
+                .filter { e -> e.ledger && Month.ALL.any { m -> e.amounts[m] != null && e.year * 100 + m.number in edges } }
+                .mapNotNull { e -> runCatching { repo.loadLedger(account, e.id, e.year) }.getOrNull() }
+                .associateBy { it.id }
+        }
+        _state.update { it.copy(period = period, periodLedgers = ledgers, periodInitial = initial) }
+    }
 
     private suspend fun refreshFromCache(account: String) {
         val all = runCatching { repo.cachedExpenses(account) }.getOrDefault(emptyList())

@@ -12,6 +12,12 @@ heading when you cut a release.
 
 ## [Unreleased]
 
+## [0.22.0] — 2026-11-19
+
+### Added
+- **Pick a period on Home.** Tapping the month's name opens a picker with two modes: a list of up to 12 months (any months, across years, from a year grid) or a first and last day on a calendar. Home then shows the balance at the start of the period and at its end, and each line as the total of everything it came to inside the period (bills count whether or not they are paid yet; the balance still counts only what is paid or received). Periods are read-only; the ✕ on the left (or *Back to one month* in the picker) returns to a single month, and the arrows work as before there.
+- **How days work.** The vault stores plain notes by month, so a note's month counts as its 1st; a ledger purchase counts on its own day. A day range can therefore cut a ledger's month in two, while a bill dated for a month counts only if the range reaches that month's 1st. For a hand-picked list, months left out still count towards the balance — they just stay out of the lines. No vault format changes.
+
 ## [0.21.0] — 2026-11-19
 
 ### Added
