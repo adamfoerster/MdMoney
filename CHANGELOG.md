@@ -12,6 +12,11 @@ heading when you cut a release.
 
 ## [Unreleased]
 
+## [0.21.0] — 2026-11-19
+
+### Added
+- **Balance at the start and end of each month.** Under the month stepper, Home shows where the account's balance stands when the month begins and when it ends. It follows the same checkbook rule as the account balance — only bills marked paid and income marked received have moved money — so each month starts where the previous one ended and December's end is the account balance. Shown once the year has an opening balance; no vault format changes.
+
 ## [0.20.0] — 2026-11-09
 
 ### Added

@@ -62,6 +62,7 @@ import com.mdmoney.domain.Month
 import com.mdmoney.domain.categoryTitle
 import com.mdmoney.ui.AppModel
 import com.mdmoney.ui.UiState
+import com.mdmoney.ui.monthBalance
 import com.mdmoney.ui.monthLines
 import com.mdmoney.ui.components.CurrencyPicker
 import com.mdmoney.ui.components.Eyebrow
@@ -145,6 +146,14 @@ fun HomeScreen(model: AppModel, state: UiState) {
 
                 MonthStepper(month, s.month(month), state.year) { model.setHomeMonth(it) }
 
+                state.initialBalance?.let { initial ->
+                    val mb = monthBalance(state.expenses, state.year, month, initial)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        MonthBalanceTile(s.monthStartBalance, mb.start, Modifier.weight(1f))
+                        MonthBalanceTile(s.monthEndBalance, mb.end, Modifier.weight(1f))
+                    }
+                }
+
                 if (lines.isEmpty) {
                     Text(
                         s.nothingThisMonth,
@@ -185,6 +194,21 @@ fun HomeScreen(model: AppModel, state: UiState) {
             currency = state.currency,
             onDismiss = { editAccount = false },
             onSave = { title, currency -> model.editAccount(title, currency); editAccount = false },
+        )
+    }
+}
+
+@Composable
+private fun MonthBalanceTile(label: String, value: Double, modifier: Modifier) {
+    val sep = LocalDecimalSeparator.current
+    val cur = LocalCurrencySymbol.current
+    Column(modifier.importCard().padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(label.uppercase(), style = MaterialTheme.typography.labelSmall, color = D.soft)
+        Text(
+            formatMoney(value, sep, cur),
+            style = MaterialTheme.typography.bodyLarge.copy(fontSize = 17.sp, fontFeatureSettings = "tnum"),
+            fontWeight = FontWeight.Medium,
+            color = if (value < 0.0) D.red else D.ink,
         )
     }
 }

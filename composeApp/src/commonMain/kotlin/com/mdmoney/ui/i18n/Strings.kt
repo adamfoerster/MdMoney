@@ -83,6 +83,8 @@ interface Strings {
     val hideAmounts: String
     val showAmounts: String
     val initialBalance: String
+    val monthStartBalance: String
+    val monthEndBalance: String
     val setInitialBalance: String
     val createAccount: String
     val accountNameHint: String
