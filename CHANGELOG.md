@@ -12,6 +12,11 @@ heading when you cut a release.
 
 ## [Unreleased]
 
+## [0.25.0] â€” 2026-11-20
+
+### Changed
+- **The Windows installer installs just for you.** It now puts MdMoney under `%LocalAppData%\Programs` and asks for no administrator rights, instead of installing for every user under Program Files. A copy installed by an earlier all-users installer is not moved: uninstall it from Windows Settings once, then install again.
+
 ## [0.24.1] — 2026-11-20
 
 ### Fixed

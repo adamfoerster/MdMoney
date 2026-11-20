@@ -346,6 +346,8 @@ compose.desktop {
                 packageVersion = "1.${appVersion.substringAfter('.')}"
                 // Never change: it lets a newer Windows installer upgrade the installed app in place.
                 upgradeUuid = "e02a7005-d65b-48e3-865c-df3c1857a41a"
+                // Install under %LocalAppData%\Programs for the current user: no admin prompt.
+                perUserInstall = true
             }
             linux { iconFile.set(project.file("icons/mdmoney.png")) }
         }

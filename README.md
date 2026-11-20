@@ -227,6 +227,7 @@ The storage layer is the only platform-specific code, behind the `VaultStorage` 
 - **Windows installer:** `./gradlew :composeApp:windowsExe` → `composeApp/build/windows/MdMoney-1.<minor>.<patch>.exe`.
   The plugin downloads the WiX Toolset on first run. While the app is `0.x.y` the installer is versioned
   `1.x.y` (Windows rejects a leading zero); `upgradeUuid` is pinned so a newer installer upgrades in place.
+  It installs per user (`%LocalAppData%\Programs`, no admin rights).
 - **Desktop with hot reload:** `./gradlew :composeApp:hotRunJvm --auto` — edits to composables land in the
   running window. This one needs a **JetBrains Runtime**, since redefining a class in a live JVM is a
   JBR feature; `compose.reload.jbr.autoProvisioningEnabled` in `gradle.properties` lets the plugin
