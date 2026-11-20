@@ -12,6 +12,16 @@ heading when you cut a release.
 
 ## [Unreleased]
 
+## [0.24.1] � 2026-11-20
+
+### Fixed
+- **Re-importing a month from another file type no longer doubles it.** A statement line was recognised as already in the vault only when its note matched word for word, so an OFX import over a PDF import of the same month (`Pix - NAME - CNPJ - BANK�` against `Pix NAME`) wrote every line a second time. Lines now count as the same when the day and amount agree and one note is the beginning of the other, ignoring the ` - ` separators; each vault row still covers a single line, so two genuine identical purchases are not merged.
+
+## [0.24.0] — 2026-11-20
+
+### Added
+- **Statement import reads OFX files.** The file picker now accepts `.ofx` as well as PDF. An OFX statement is read exactly — date, signed amount and description of every line come straight from the file, with no model or guessing — and the statement period and currency are taken from it. Lines go through the same review, duplicate check and `match:` filing as a PDF. Both OFX 1.x (SGML) and 2.x (XML) are understood, in UTF-8 or Windows-1252.
+
 ## [0.23.0] — 2026-11-19
 
 ### Added

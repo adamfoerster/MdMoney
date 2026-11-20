@@ -30,6 +30,11 @@ class JvmImportPlatform(
         return withContext(Dispatchers.IO) { PickedPdf(file.name, file.readBytes()) }
     }
 
+    override suspend fun pickStatement(): PickedPdf? {
+        val file = choose("PDF / OFX", "pdf", "ofx") ?: return null
+        return withContext(Dispatchers.IO) { PickedPdf(file.name, file.readBytes()) }
+    }
+
     override suspend fun pdfPages(bytes: ByteArray): List<String> = withContext(Dispatchers.IO) {
         pdfPagesOf(bytes)
     }
@@ -60,8 +65,8 @@ class JvmImportPlatform(
 
     override suspend fun pickModelFile(): String? = choose("GGUF", "gguf")?.absolutePath
 
-    private suspend fun choose(label: String, extension: String): File? = withContext(Dispatchers.Swing) {
-        NativeFileDialog.openFile(title = label, label = label, extension = extension, startDir = lastDir)
+    private suspend fun choose(label: String, vararg extensions: String): File? = withContext(Dispatchers.Swing) {
+        NativeFileDialog.openFile(title = label, label = label, extensions = extensions.toList(), startDir = lastDir)
             ?.also { lastDir = it.parentFile }
     }
 

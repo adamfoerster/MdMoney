@@ -53,6 +53,7 @@ import platform.UIKit.UIImagePNGRepresentation
 import platform.UIKit.UIScreen
 import platform.UIKit.UIDocumentPickerDelegateProtocol
 import platform.UIKit.UIDocumentPickerViewController
+import platform.UniformTypeIdentifiers.UTType
 import platform.UniformTypeIdentifiers.UTTypePDF
 import platform.darwin.NSObject
 import platform.posix.memcpy
@@ -84,8 +85,14 @@ class IosImportPlatform : ImportPlatform {
         dir
     }
 
-    override suspend fun pickPdf(): PickedPdf? {
-        val url = presentPicker() ?: return null
+    override suspend fun pickPdf(): PickedPdf? = pick(listOf(UTTypePDF))
+
+    // OFX has no built-in type; looked up by extension, and the content tells the format.
+    override suspend fun pickStatement(): PickedPdf? =
+        pick(listOfNotNull(UTTypePDF, UTType.typeWithFilenameExtension("ofx")))
+
+    private suspend fun pick(types: List<*>): PickedPdf? {
+        val url = presentPicker(types) ?: return null
         val scoped = url.startAccessingSecurityScopedResource()
         try {
             val data = NSData.dataWithContentsOfURL(url) ?: return null
@@ -167,10 +174,10 @@ class IosImportPlatform : ImportPlatform {
 
     override suspend fun openLlm(path: String): LocalLlm = withContext(Dispatchers.Default) { openIosLlm(path) }
 
-    private suspend fun presentPicker(): NSURL? = suspendCancellableCoroutine { cont ->
+    private suspend fun presentPicker(types: List<*>): NSURL? = suspendCancellableCoroutine { cont ->
         val delegate = PdfPickerDelegate(cont)
         pickerDelegate = delegate
-        val picker = UIDocumentPickerViewController(forOpeningContentTypes = listOf(UTTypePDF))
+        val picker = UIDocumentPickerViewController(forOpeningContentTypes = types)
         picker.delegate = delegate
         val root = UIApplication.sharedApplication.keyWindow?.rootViewController
         if (root == null) cont.resume(null) else root.presentViewController(picker, animated = true, completion = null)

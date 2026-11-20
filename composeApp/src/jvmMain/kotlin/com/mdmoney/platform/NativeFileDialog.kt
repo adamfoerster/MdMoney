@@ -22,19 +22,20 @@ object NativeFileDialog {
     private val isMac = osName.contains("mac")
     private val isWindows = osName.contains("windows")
 
-    /** One file with the given [extension] (no dot), or null when cancelled. */
-    fun openFile(title: String, label: String, extension: String, startDir: File?): File? {
-        if (!isMac && !isWindows) return swingOpen(title, JFileChooser.FILES_ONLY, startDir, label, extension)
+    /** One file with one of the given [extensions] (no dot), or null when cancelled. */
+    fun openFile(title: String, label: String, extensions: List<String>, startDir: File?): File? {
+        if (!isMac && !isWindows) return swingOpen(title, JFileChooser.FILES_ONLY, startDir, label, extensions.toTypedArray())
         val dialog = FileDialog(null as Frame?, title, FileDialog.LOAD).apply {
             startDir?.takeIf { it.isDirectory }?.let { directory = it.absolutePath }
             // Windows reads a wildcard in `file` as the type filter and ignores filenameFilter; macOS
-            // is the other way round. Setting both keeps each platform's picker to the one type.
-            if (isWindows) file = "*.$extension"
+            // is the other way round. Setting both keeps each platform's picker to the right types.
+            // Windows takes several patterns separated by semicolons.
+            if (isWindows) file = extensions.joinToString(";") { "*.$it" }
             filenameFilter = FilenameFilter { dir, name ->
-                name.endsWith(".$extension", ignoreCase = true) || File(dir, name).isDirectory
+                extensions.any { name.endsWith(".$it", ignoreCase = true) } || File(dir, name).isDirectory
             }
         }
-        return dialog.pick()?.takeIf { it.extension.equals(extension, ignoreCase = true) }
+        return dialog.pick()?.takeIf { f -> extensions.any { f.extension.equals(it, ignoreCase = true) } }
     }
 
     /** One folder, or null when cancelled. */
@@ -64,7 +65,7 @@ object NativeFileDialog {
         mode: Int,
         startDir: File?,
         label: String?,
-        extension: String?,
+        extensions: Array<String>?,
     ): File? {
         // Must be set before the chooser is created. The system look and feel is the closest Swing
         // gets to native; if it is unavailable the default one is kept.
@@ -72,7 +73,7 @@ object NativeFileDialog {
         val chooser = JFileChooser().apply {
             dialogTitle = title
             fileSelectionMode = mode
-            if (label != null && extension != null) fileFilter = FileNameExtensionFilter(label, extension)
+            if (label != null && extensions != null) fileFilter = FileNameExtensionFilter(label, *extensions)
             startDir?.takeIf { it.isDirectory }?.let { currentDirectory = it }
         }
         return if (chooser.showOpenDialog(null) == JFileChooser.APPROVE_OPTION) chooser.selectedFile else null

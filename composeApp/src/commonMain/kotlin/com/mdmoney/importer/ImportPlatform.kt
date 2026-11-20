@@ -14,6 +14,12 @@ interface ImportPlatform {
     /** Lets the user choose a PDF; null when cancelled. */
     suspend fun pickPdf(): PickedPdf?
 
+    /**
+     * Lets the user choose a statement: a PDF or an OFX file (told apart by [OfxParser.looksLikeOfx]).
+     * Platforms override this to offer both types; the default only knows PDFs.
+     */
+    suspend fun pickStatement(): PickedPdf? = pickPdf()
+
     /** The text of each page, in order, with a line per printed line where the reader can tell. */
     suspend fun pdfPages(bytes: ByteArray): List<String>
 

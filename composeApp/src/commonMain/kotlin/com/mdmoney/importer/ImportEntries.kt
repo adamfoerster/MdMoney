@@ -58,6 +58,31 @@ data class EntryKey(val date: String, val note: String, val cents: Long) {
             note = entry.note.trim().lowercase().replace(Regex("""\s+"""), " "),
             cents = round(entry.amount * 100).toLong(),
         )
+
+        /** Shortest note that may stand for a longer one that merely continues it. */
+        private const val MIN_PREFIX = 10
+
+        /** Separator-only words: how OFX joins the fields a PDF writes with plain spaces. */
+        private val SEPARATORS = setOf("-", "–", "—")
+
+        private fun loose(note: String): String =
+            note.split(' ').filter { it.isNotEmpty() && it !in SEPARATORS }.joinToString(" ")
+    }
+
+    /**
+     * Whether [other] is this same statement line worded differently: same day and amount, and notes
+     * that are equal or one is the beginning of the other once the " - " separators are ignored.
+     * A PDF cuts the description after its first line and writes `Pix NAME`; an OFX keeps all of it
+     * and writes `Pix - NAME - CNPJ - BANK (0033) Agência…`. Day and amount to the cent must still
+     * agree, so the loose note comparison never has to carry the match alone.
+     */
+    fun sameLine(other: EntryKey): Boolean {
+        if (date != other.date || cents != other.cents) return false
+        if (note == other.note) return true
+        val a = loose(note)
+        val b = loose(other.note)
+        val (short, long) = if (a.length <= b.length) a to b else b to a
+        return short.length >= MIN_PREFIX && long.startsWith(short)
     }
 }
 
@@ -86,29 +111,20 @@ object ImportDedup {
         transfers: List<TransferEntry>,
     ): List<Boolean> {
         if (transfers.isEmpty()) return alreadyPresent(candidates, existing)
-        val remaining = existing.toMutableMap()
+        val remaining = existing.expand()
         val unused = transfers.toMutableList()
-        fun take(key: EntryKey) {
-            remaining[key] = ((remaining[key] ?: 0) - 1).coerceAtLeast(0)
-        }
         return candidates.mapIndexed { i, key ->
             val income = incomes[i]
             // A row of a transfer group with this very note: the same line again.
-            val exact = unused.indexOfFirst { it.income == income && it.key == key }
+            val exact = unused.indexOfFirst { it.income == income && it.key.sameLine(key) }
             if (exact >= 0) {
-                unused.removeAt(exact)
-                take(key)
+                remaining.takeLike(unused.removeAt(exact).key)
                 return@mapIndexed true
             }
-            val left = remaining[key] ?: 0
-            if (left > 0) {
-                remaining[key] = left - 1
-                return@mapIndexed true
-            }
+            if (remaining.takeLike(key)) return@mapIndexed true
             val other = unused.indexOfFirst { it.sameMoney(key, income) }
             if (other >= 0) {
-                take(unused[other].key)
-                unused.removeAt(other)
+                remaining.takeLike(unused.removeAt(other).key)
                 true
             } else {
                 false
@@ -122,16 +138,19 @@ object ImportDedup {
      * twice on one day, and if the vault has one of them only the second is new.
      */
     fun alreadyPresent(candidates: List<EntryKey>, existing: Map<EntryKey, Int>): List<Boolean> {
-        val remaining = existing.toMutableMap()
-        return candidates.map { key ->
-            val left = remaining[key] ?: 0
-            if (left > 0) {
-                remaining[key] = left - 1
-                true
-            } else {
-                false
-            }
-        }
+        val remaining = existing.expand()
+        return candidates.map { key -> remaining.takeLike(key) }
+    }
+
+    private fun Map<EntryKey, Int>.expand(): MutableList<EntryKey> =
+        entries.flatMap { (key, n) -> List(n) { key } }.toMutableList()
+
+    /** Uses up one row that is this line — the identical one first, else the same line worded differently. */
+    private fun MutableList<EntryKey>.takeLike(key: EntryKey): Boolean {
+        val i = indexOf(key).takeIf { it >= 0 } ?: indexOfFirst { it.sameLine(key) }
+        if (i < 0) return false
+        removeAt(i)
+        return true
     }
 
     fun count(entries: Iterable<LedgerEntry>): Map<EntryKey, Int> =

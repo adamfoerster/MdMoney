@@ -151,4 +151,6 @@ data class ExtractionResult(
     val usedModel: Boolean,
     /** Why the model wasn't used although one was wanted (it failed to load or to answer); null otherwise. */
     val modelError: String? = null,
+    /** Read from an OFX file: exact fields, no model or guessing, and no PDF to check the lines against. */
+    val fromOfx: Boolean = false,
 )

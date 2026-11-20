@@ -20,7 +20,7 @@ import java.io.File
 
 /** Bridges the system document picker (an Activity result) into a suspend call. */
 fun interface DocumentPicker {
-    suspend fun pick(mimeType: String): Uri?
+    suspend fun pick(mimeTypes: List<String>): Uri?
 }
 
 /**
@@ -36,8 +36,15 @@ class AndroidImportPlatform(
 
     private val modelsDir = File(context.noBackupFilesDir, "models")
 
-    override suspend fun pickPdf(): PickedPdf? {
-        val uri = picker.pick("application/pdf") ?: return null
+    override suspend fun pickPdf(): PickedPdf? = pick(listOf("application/pdf"))
+
+    // Banks and file managers rarely label an .ofx file with a type of its own, so the generic ones
+    // are offered too; the content tells the format (OfxParser.looksLikeOfx).
+    override suspend fun pickStatement(): PickedPdf? =
+        pick(listOf("application/pdf", "application/x-ofx", "application/ofx", "application/octet-stream", "text/plain"))
+
+    private suspend fun pick(mimeTypes: List<String>): PickedPdf? {
+        val uri = picker.pick(mimeTypes) ?: return null
         return withContext(Dispatchers.IO) {
             val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: return@withContext null
             PickedPdf(displayName(uri) ?: "statement.pdf", bytes)

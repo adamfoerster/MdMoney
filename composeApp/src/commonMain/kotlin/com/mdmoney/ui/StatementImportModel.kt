@@ -22,6 +22,7 @@ import com.mdmoney.importer.ImportSummary
 import com.mdmoney.importer.StatementPeriod
 import com.mdmoney.importer.TransferEntry
 import com.mdmoney.importer.LocalLlm
+import com.mdmoney.importer.OfxParser
 import com.mdmoney.importer.PickedPdf
 import com.mdmoney.importer.ReviewRow
 import com.mdmoney.importer.SimpleDate
@@ -274,12 +275,14 @@ class StatementImportModel(
     fun pickAndRead(categories: List<Category>) {
         readJob?.cancel()
         readJob = scope.launch {
-            val pdf = platform.pickPdf() ?: return@launch
+            val pdf = platform.pickStatement() ?: return@launch
             var llm: LocalLlm? = null
             try {
-                val useModel = _state.value.modelStatus == ModelStatus.Ready
+                val isOfx = OfxParser.looksLikeOfx(pdf.bytes)
+                val useModel = !isOfx && _state.value.modelStatus == ModelStatus.Ready
                 _state.update { it.copy(phase = ImportPhase.Reading(pdf.name, 0, 0, loadingModel = useModel)) }
-                val pages = platform.pdfPages(pdf.bytes)
+                // An OFX file needs no PDF reader, model or page checks: its fields are exact.
+                val pages = if (isOfx) emptyList() else platform.pdfPages(pdf.bytes)
                 var loadError: String? = null
                 llm = if (useModel) {
                     try {
@@ -298,16 +301,21 @@ class StatementImportModel(
                 // screen that sits on "page 2 of 7" that long looks frozen.
                 val started = TimeSource.Monotonic.markNow()
                 _state.update { it.copy(phase = ImportPhase.Reading(pdf.name, 0, 0, loadingModel = false, started = started)) }
-                val result = StatementExtractor(llm, categories).extract(pages, fallbackYear()) { done, total ->
-                    _state.update { it.copy(phase = ImportPhase.Reading(pdf.name, done, total, loadingModel = false, started = started)) }
-                }.let { if (loadError != null) it.copy(modelError = loadError) else it }
+                val result = if (isOfx) {
+                    OfxParser.parse(pdf.bytes)
+                } else {
+                    StatementExtractor(llm, categories).extract(pages, fallbackYear()) { done, total ->
+                        _state.update { it.copy(phase = ImportPhase.Reading(pdf.name, done, total, loadingModel = false, started = started)) }
+                    }.let { if (loadError != null) it.copy(modelError = loadError) else it }
+                }
                 val account = _state.value.account
                 val months = result.transactions.map { it.date.year to Month.ALL.first { m -> m.number == it.date.month } }.toSet()
                 val existing = account?.let { runCatching { repo.existingEntryCounts(it, months) }.getOrNull() }.orEmpty()
                 val transfers = account?.let { runCatching { repo.existingTransfers(it, months) }.getOrNull() }.orEmpty()
                 // Read again rather than reused: an import made since the screen opened taught new patterns.
                 val groups = account?.let { freshGroups(it) } ?: AccountGroups()
-                this@StatementImportModel.pdf = pdf
+                // Only a PDF can be shown beside its lines.
+                this@StatementImportModel.pdf = pdf.takeUnless { isOfx }
                 this@StatementImportModel.existing = existing
                 this@StatementImportModel.transfers = transfers
                 _state.update {

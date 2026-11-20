@@ -38,10 +38,10 @@ class MainActivity : ComponentActivity() {
         pendingDocument = null
     }
 
-    private val documentPicker = DocumentPicker { mimeType ->
+    private val documentPicker = DocumentPicker { mimeTypes ->
         suspendCancellableCoroutine { cont ->
             pendingDocument = cont
-            openDocument.launch(arrayOf(mimeType))
+            openDocument.launch(mimeTypes.toTypedArray())
         }
     }
 

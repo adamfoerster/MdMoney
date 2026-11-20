@@ -421,7 +421,7 @@ private fun ReviewPhase(importer: StatementImportModel, state: ImportUiState, ph
             modifier = Modifier.padding(top = 6.dp),
         )
     }
-    if (!result.usedModel) {
+    if (!result.usedModel && !result.fromOfx) {
         Column(Modifier.padding(top = 20.dp).fillMaxWidth().box(D.noteBg, D.noteBorder, 10).padding(12.dp)) {
             Text(s.simpleModeNotice, style = MaterialTheme.typography.bodySmall, color = D.noteInk)
             result.modelError?.let {
@@ -435,7 +435,8 @@ private fun ReviewPhase(importer: StatementImportModel, state: ImportUiState, ph
         ReconciliationColumns(result.reconciliation)
         // Always on offer — matching totals don't prove every line is right (two errors can cancel out,
         // and a statement may print no total at all); the hint only appears when they disagree.
-        if (state.rows.isNotEmpty()) {
+        // (An OFX file has no PDF to check the lines against.)
+        if (state.rows.isNotEmpty() && !result.fromOfx) {
             Box(Modifier.fillMaxWidth().height(1.dp).background(D.rule))
             Row(
                 Modifier.fillMaxWidth().height(48.dp).clickable { importer.openAmountReview() }.padding(horizontal = 14.dp),
@@ -447,7 +448,7 @@ private fun ReviewPhase(importer: StatementImportModel, state: ImportUiState, ph
             }
         }
     }
-    if (state.rows.isNotEmpty() && ImportPlanner.needsAmountReview(result.reconciliation)) {
+    if (state.rows.isNotEmpty() && !result.fromOfx && ImportPlanner.needsAmountReview(result.reconciliation)) {
         Text(s.reviewAmountsHint, style = MaterialTheme.typography.bodySmall, color = D.todoInk, modifier = Modifier.padding(top = 8.dp))
     }
 
